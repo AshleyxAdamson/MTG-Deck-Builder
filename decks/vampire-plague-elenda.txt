@@ -1,0 +1,105 @@
+# The Vampire Plague (Elenda) - DRAFT for review
+# Brief: decks/briefs/vampire-plague-elenda.md   Notes: decks/vampire-plague-elenda.md
+
+# Commander (1)
+1 Elenda, the Dusk Rose
+
+# Ramp (8)
+1 Sol Ring
+1 Arcane Signet
+1 Orzhov Signet
+1 Talisman of Hierarchy
+1 Mind Stone
+1 Pillar of Origins
+1 Patchwork Banner
+1 Herald's Horn
+
+# Card draw (8)
+1 Welcoming Vampire
+1 Champion of Dusk
+1 Dusk Legion Zealot
+1 Twilight Prophet
+1 Scheming Silvertongue
+1 Skullclamp
+1 Vanquisher's Banner
+1 Pact of the Serpent
+
+# Removal (7 spot removal + 2 board wipes)
+1 Swords to Plowshares
+1 Path to Exile
+1 Anguished Unmaking
+1 Vindicate
+1 Mortify
+1 Despark
+1 Generous Gift
+# Board wipes (2 of the 2 allowed)
+1 Kindred Dominance
+1 Olivia's Wrath
+
+# Raise-their-dead package (6)
+1 Animate Dead
+1 Rise from the Grave
+1 Beacon of Unrest
+1 Debtors' Knell
+1 Sepulchral Primordial
+1 Rise of the Dark Realms
+
+# Vampires: lords and anthems (7)
+1 Legion Lieutenant
+1 Captivating Vampire
+1 Edgar, Charmed Groom
+1 Markov Baron
+1 Thirsting Bloodlord
+1 Bloodline Keeper
+1 Vampire Nocturnus
+
+# Vampires: token makers, sac outlets, lifelink (11)
+1 Mavren Fein, Dusk Apostle
+1 Elenda's Hierophant
+1 Baron Bertram Graywater
+1 Martyr of Dusk
+1 Preacher of the Schism
+1 Viscera Seer
+1 Bloodthrone Vampire
+1 Henrika Domnathi
+1 Vampire Nighthawk
+1 Crossway Troublemakers
+1 Indulging Patrician
+
+# Payoffs: drain (8, all vampires)
+1 Blood Artist
+1 Cruel Celebrant
+1 Falkenrath Noble
+1 Sanctum Seeker
+1 Cordial Vampire
+1 Vito, Thorn of the Dusk Rose
+1 Wispdrinker Vampire
+1 Malakir Bloodwitch
+
+# Payoffs: tokens and token multipliers (6)
+1 Legion's Landing
+1 Sorin, Lord of Innistrad
+1 Sorin, Imperious Bloodlord
+1 Call to the Feast
+1 Kaya, Geist Hunter
+1 Renewed Solidarity
+
+# Lands (36)
+1 Command Tower
+1 Path of Ancestry
+1 Exotic Orchard
+1 Isolated Chapel
+1 Caves of Koilos
+1 Shattered Sanctum
+1 Concealed Courtyard
+1 Fetid Heath
+1 Tainted Field
+1 Shineshadow Snarl
+1 Temple of Silence
+1 Scoured Barrens
+1 Orzhov Basilica
+1 Unclaimed Territory
+1 Voldaren Estate
+1 Vault of the Archangel
+11 Swamp
+9 Plains

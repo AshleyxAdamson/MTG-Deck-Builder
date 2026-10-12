@@ -5,6 +5,7 @@ Everything lands in data/ (gitignored), grouped by who publishes it:
 
     data/scryfall/oracle-cards.jsonl.gz   one card per line, per Oracle ID
     data/scryfall/rulings.jsonl.gz        one ruling per line
+    data/scryfall/oracle-tags.jsonl.gz    one community tag per line (board wipes, ramp, ...)
     data/scryfall/catalogs/<name>.json    keyword, type and name lists
     data/scryfall/sets.json
     data/scryfall/symbology.json
@@ -47,6 +48,7 @@ RETRY_STATUSES = {429, 500, 502, 503, 504}
 BULK_FILES = {
     "cards": ("oracle_cards", "scryfall/oracle-cards.jsonl.gz"),
     "rulings": ("rulings", "scryfall/rulings.jsonl.gz"),
+    "tags": ("oracle_tags", "scryfall/oracle-tags.jsonl.gz"),
 }
 
 # The deck-building subset of /catalog/*. Left out on purpose: artist-names,
@@ -236,7 +238,7 @@ def fetch_rules(manifest: Manifest, force: bool) -> None:
 
 
 def main() -> None:
-    groups = ["cards", "rulings", "catalogs", "rules"]
+    groups = [*BULK_FILES, "catalogs", "rules"]
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--force", action="store_true", help="fetch even if the local file is current")
     parser.add_argument("--only", nargs="+", choices=groups, metavar="GROUP",
@@ -245,7 +247,7 @@ def main() -> None:
     wanted = args.only or groups
 
     manifest = Manifest()
-    bulk = [g for g in ("cards", "rulings") if g in wanted]
+    bulk = [g for g in BULK_FILES if g in wanted]
     try:
         if bulk:
             print("Scryfall bulk data")

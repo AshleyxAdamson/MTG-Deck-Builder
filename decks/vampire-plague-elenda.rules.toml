@@ -1,0 +1,9 @@
+# Rules from decks/briefs/vampire-plague-elenda.md, in a form `mtg check` enforces.
+commander = "Elenda, the Dusk Rose"
+budget = 150
+not_together = [["Sanguine Bond", "Exquisite Blood"]]
+
+[limits]
+board-wipe = 2
+mass-land-denial = 0
+extra-turn = 0
