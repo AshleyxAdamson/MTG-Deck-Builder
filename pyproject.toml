@@ -1,0 +1,15 @@
+[project]
+name = "mtg-deck-builder"
+version = "0.1.0"
+description = "Local Magic: The Gathering card search for deck-building agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp>=2,<3"]
+
+[project.scripts]
+mtg = "mtg_deck_builder.cli:main"
+mtg-mcp = "mtg_deck_builder.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
