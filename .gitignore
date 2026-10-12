@@ -1,0 +1,7 @@
+# Downloaded by scripts/fetch_data.py
+/data/
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
