@@ -1,5 +1,5 @@
 # Rules for The Vampire Plague: the brief's own constraints (decks/briefs/vampire-plague-elenda.md)
-# on top of the casual baseline in skills/commander-deck/rules-template.toml.
+# on top of the casual baseline from the commander-deck skill's rules-template.toml.
 
 commander = "Elenda, the Dusk Rose"
 budget = 150

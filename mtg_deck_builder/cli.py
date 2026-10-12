@@ -102,10 +102,42 @@ def update(force: bool) -> None:
     print(f"{total} combos in the index")
 
 
+def load_deck(args: argparse.Namespace) -> tuple[list[tuple[int, str]], dict, list[str]]:
+    """A decklist's entries, its rules and its commanders, from the files and flags given."""
+    decklist = Path(args.decklist)
+    try:
+        entries = decks.parse_decklist(decklist.read_text(encoding="utf-8"))
+    except OSError as error:
+        raise cards.CardDataError(f"Cannot read {decklist}: {error.strerror}")
+    # A deck's rules live next to it: elenda.txt is checked against elenda.rules.toml.
+    rules_file = Path(args.rules) if args.rules else decklist.with_suffix(".rules.toml")
+    rules = decks.load_rules(rules_file) if args.rules or rules_file.exists() else {}
+    commanders = args.commander or rules.get("commander") or []
+    return entries, rules, [commanders] if isinstance(commanders, str) else commanders
+
+
+def export(args: argparse.Namespace) -> None:
+    """Print the deck as a bare list for pasting into Moxfield or another deck site.
+
+    Those importers read a blank line as the start of the sideboard and do not know
+    our `#` headers, so the output has neither. Commanders come first.
+    """
+    entries, _, commanders = load_deck(args)
+    quantities: dict[str, int] = {}
+    for quantity, name in entries:
+        quantities[name] = quantities.get(name, 0) + quantity
+    leading = {name.lower() for name in commanders}
+    print("\n".join(
+        [f"1 {name}" for name in commanders]
+        + [f"{quantity} {name}" for name, quantity in quantities.items() if name.lower() not in leading]))
+
+
 def run(args: argparse.Namespace) -> None:
     # The download has to finish before the index is opened.
     if args.command == "update":
         return update(args.force)
+    if args.command == "export":
+        return export(args)
 
     with closing(cards.open_index()) as db:
         if args.command == "search":
@@ -136,19 +168,10 @@ def run(args: argparse.Namespace) -> None:
             result = edhrec.commander_ideas(
                 db, args.commander, theme=args.theme, per_list=args.per_list, price_max=bounds(args.price)[1])
         elif args.command == "check":
-            decklist = Path(args.decklist)
-            try:
-                entries = decks.parse_decklist(decklist.read_text(encoding="utf-8"))
-            except OSError as error:
-                raise cards.CardDataError(f"Cannot read {decklist}: {error.strerror}")
-            # A deck's rules live next to it: elenda.txt is checked against elenda.rules.toml.
-            rules_file = Path(args.rules) if args.rules else decklist.with_suffix(".rules.toml")
-            rules = decks.load_rules(rules_file) if args.rules or rules_file.exists() else {}
-            commanders = args.commander or rules.get("commander")
+            entries, rules, commanders = load_deck(args)
             if not commanders:
                 raise cards.CardDataError("Name the commander with --commander, or as commander = \"...\" in the rules file.")
-            result = decks.validate_deck(
-                db, [commanders] if isinstance(commanders, str) else commanders, entries, rules)
+            result = decks.validate_deck(db, commanders, entries, rules)
         else:
             result = cards.get_rulings(db, args.name)
 
@@ -240,6 +263,10 @@ def main() -> None:
     check.add_argument("--commander", action="append",
                        help="commander name (give twice for partners or a background)")
     check.add_argument("--rules", help="deck rules file (default: the decklist's name with .rules.toml)")
+    paste = commands.add_parser("export", help="print a decklist ready to paste into Moxfield or another deck site")
+    paste.add_argument("decklist")
+    paste.add_argument("--commander", action="append", help="commander name, listed first")
+    paste.add_argument("--rules", help="deck rules file to read the commander from")
     refresh = commands.add_parser("update", help="download the latest data and refresh the index")
     refresh.add_argument("--force", action="store_true", help="download even if the local files are current")
 

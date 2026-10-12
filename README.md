@@ -80,10 +80,13 @@ uv run mtg card "Unesh, Criosphinx Sovereign" "Sharuum the Hegemon"
 uv run mtg rulings "Blood Moon"
 uv run mtg ideas "Elenda, the Dusk Rose" --theme vampires --price "<=5"
 uv run mtg check decks/vampire-plague-elenda.txt
+uv run mtg export decks/vampire-plague-elenda.txt | pbcopy
 uv run mtg update
 ```
 
 `--brief` prints one line per card. `uv run mtg tags` lists tags matching the words given.
+
+`uv run mtg export` prints a decklist as a bare `1 Card Name` list, commander first, for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
 
 `uv run mtg ideas` is the one command that needs the internet. EDHREC has no bulk download, so each commander's page is fetched on first use and cached in `data/edhrec/` for a week. It reads an unofficial endpoint that could change.
 
@@ -143,19 +146,9 @@ A clean result means the deck has no *known* combo. The list holds what people h
 
 ## Building decks
 
-`skills/commander-deck/` is a Claude skill that walks an agent from a deck brief to a checked decklist with the tools above: read the brief, write its rules file, set role counts, gather candidates, cut to 100, check, and review how the deck will feel at the table.
+The `commander-deck` Claude skill walks an agent from a deck brief to a checked decklist with the tools above: read the brief, write its rules file, set role counts, gather candidates, cut to 100, check, and review how the deck will feel at the table. It lives in the [dev-tools](https://github.com/AshleyxAdamson/dev-tools) repo at `skills/commander-deck/`, with the baseline numbers for a casual deck and a starting rules file, and is linked into `~/.claude/skills/` from there.
 
-- `SKILL.md`: the steps.
-- `baseline.md`: how many lands, ramp, card advantage, removal and protection a casual deck wants, how that shifts by archetype, and what makes a deck unpleasant to play against.
-- `rules-template.toml`: that baseline as a rules file to copy next to a new decklist.
-
-To use it in every Claude Code session, link it into your skills folder:
-
-```bash
-ln -s "$PWD/skills/commander-deck" ~/.claude/skills/commander-deck
-```
-
-Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file and notes in `decks/`. The evidence behind the baseline and the combo detection is in `docs/research/`.
+Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file and notes in `decks/`. The evidence behind the skill's baseline and behind combo detection is in `docs/research/`.
 
 ### Network access
 
