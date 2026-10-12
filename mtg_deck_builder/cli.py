@@ -9,10 +9,11 @@ import sys
 from contextlib import closing
 from pathlib import Path
 
-from . import cards, decks
+from . import cards, combos, decks, edhrec
 
 FETCH_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "fetch_data.py"
 COMPARISON = re.compile(r"^\s*(<=|>=|=|<|>)?\s*(\d+(?:\.\d+)?)\s*$")
+COMBO_KINDS = {"infinite": "infinite", "near-infinite": "near-infinite", "finite": "not infinite"}
 
 
 def bounds(value: str | None) -> tuple[float | None, float | None]:
@@ -42,8 +43,13 @@ def format_card(card: dict) -> str:
     return f"{header}\n  {card.get('type_line', '')}{stats}" + (f"\n{text}" if text else "")
 
 
+def format_combo(combo: dict) -> str:
+    results = ", ".join(combo["results"][:3]) + (", ..." if len(combo["results"]) > 3 else "")
+    return f"{' + '.join(combo['cards'])}: {COMBO_KINDS[combo['kind']]} combo ({results})  {combo['url']}"
+
+
 def format_check(report: dict) -> str:
-    errors, budget = report["errors"], report["budget"]
+    errors, budget, known = report["errors"], report["budget"], report["combos"]
     lines = [f"{' + '.join(report['commanders'])}  [{report['color_identity']}]  {report['card_count']} cards"]
     lines += [f"  PROBLEM  {errors['count']}"] if errors["count"] else []
     lines += [f"  PROBLEM  {d['quantity']} copies of {d['name']} (allowed: {d['allowed']})" for d in errors["duplicates"]]
@@ -56,6 +62,11 @@ def format_check(report: dict) -> str:
     for rule in report["rules"]:
         involved = f" ({', '.join(rule['cards'])})" if rule["cards"] else ""
         lines.append(f"  {'RULE ok ' if rule['ok'] else 'PROBLEM '} {rule['rule']}: {rule['detail']}{involved}")
+    # A combo is a problem only when one of the deck's rules counts it out.
+    broken = {rule["rule"] for rule in report["rules"] if not rule["ok"]}
+    for combo in known["included"]:
+        counted = "max_combos" in broken or (combo["infinite"] and "max_infinite_combos" in broken)
+        lines.append(f"  {'PROBLEM ' if counted else 'COMBO   '} {format_combo(combo)}")
     lines += [f"  WARNING  {warning}" for warning in report["warnings"]]
     lines.append("  Deck is valid." if report["valid"] else "  Deck is NOT valid.")
     stats = report["stats"]
@@ -67,6 +78,14 @@ def format_check(report: dict) -> str:
     lines += [f"    ${c['price_usd']:>7.2f}  {c['name']}" for c in budget["most_expensive"]]
     if budget["no_price"]:
         lines.append(f"  No price for: {', '.join(budget['no_price'])}")
+    lines.append(f"  Known combos in the deck: {len(known['included'])}"
+                 f" (Commander Spellbook, as of {known['as_of']}; it lists known combos only)")
+    if known["one_card_away"]:
+        shown, total = len(known["one_card_away"]), known["one_card_away_total"]
+        lines.append("  One card away from a combo" + (f" (the {shown} most popular of {total})" if total > shown else "") + ":")
+    for combo in known["one_card_away"]:
+        others = ", ".join(name for name in combo["cards"] if name != combo["missing"])
+        lines.append(f"    {combo['missing']}  with {others}  ({COMBO_KINDS[combo['kind']]})")
     return "\n".join(lines)
 
 
@@ -78,6 +97,9 @@ def update(force: bool) -> None:
     with closing(cards.open_index()) as db:
         total = db.execute("SELECT count(*) FROM cards").fetchone()[0]
     print(f"{total} cards in the index")
+    with closing(combos.open_index()) as db:
+        total = db.execute("SELECT count(*) FROM combos").fetchone()[0]
+    print(f"{total} combos in the index")
 
 
 def run(args: argparse.Namespace) -> None:
@@ -110,6 +132,9 @@ def run(args: argparse.Namespace) -> None:
             result = [cards.get_card(db, name) for name in args.name]
         elif args.command == "tags":
             result = cards.find_tags(db, " ".join(args.query))
+        elif args.command == "ideas":
+            result = edhrec.commander_ideas(
+                db, args.commander, theme=args.theme, per_list=args.per_list, price_max=bounds(args.price)[1])
         elif args.command == "check":
             decklist = Path(args.decklist)
             try:
@@ -144,9 +169,22 @@ def run(args: argparse.Namespace) -> None:
             for key in ("keywords", "tags", "legal_in", "banned_in"):
                 if card.get(key):
                     print(f"  {key}: {', '.join(card[key])}")
-            for key in ("game_changer", "rarity", "set", "released_at", "edhrec_rank", "rulings", "scryfall_uri"):
+            for key in ("price_printing", "game_changer", "rarity", "set", "released_at", "edhrec_rank", "rulings", "scryfall_uri"):
                 if key in card:
                     print(f"  {key}: {card[key]}")
+    elif args.command == "ideas":
+        theme = f", {result['theme']} theme" if result["theme"] else ""
+        print(f"{result['commander']}{theme}: {result['decks']} decks on EDHREC (fetched {result['fetched']})")
+        print("Themes: " + ", ".join(f"{t['theme']} ({t['decks']})" for t in result["themes"]))
+        if result["known_combos"]:
+            print("Known combos: " + "; ".join(result["known_combos"]))
+        for header, ideas in result["lists"].items():
+            print(f"\n{header}")
+            for card in ideas:
+                share = f"{card['in_decks_pct']}% of decks" if "in_decks_pct" in card else ""
+                synergy = f", {card['synergy_pct']:+d}% synergy" if "synergy_pct" in card else ""
+                price = f"${card['price_usd']:.2f}" if "price_usd" in card else "$?"
+                print(f"  {card['name']} | {card.get('type_line', '')} | {share}{synergy} | {price}")
     elif args.command == "tags":
         for tag in result:
             print(f"{tag['tag']}  ({tag['cards']} cards)  {tag.get('description', '')}")
@@ -192,6 +230,11 @@ def main() -> None:
     tags.add_argument("query", nargs="+")
     rulings = commands.add_parser("rulings", help="official rulings for one card")
     rulings.add_argument("name")
+    ideas = commands.add_parser("ideas", help="what other players run with a commander, from EDHREC (needs internet)")
+    ideas.add_argument("commander")
+    ideas.add_argument("--theme", help="one theme of the commander's decks, e.g. vampires")
+    ideas.add_argument("--price", help="leave out cards above this US dollar price, e.g. '<=5'")
+    ideas.add_argument("--per-list", type=int, default=12, help="cards shown per list")
     check = commands.add_parser("check", help="validate a Commander decklist")
     check.add_argument("decklist", help="text file with one '1 Card Name' per line")
     check.add_argument("--commander", action="append",

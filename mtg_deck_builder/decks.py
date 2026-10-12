@@ -1,7 +1,8 @@
 """Commander deck checks: read a plain decklist and validate it against the card index.
 
 A deck can also carry its own rules, taken from its brief: a budget, cards that must
-not appear together, and limits on tagged kinds of card such as board wipes.
+not appear together, limits on tagged kinds of card such as board wipes, and how
+many known combos it may hold.
 """
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 from .cards import COLORS, DATA_DIR, CardDataError, _find_card, suggest_names, tagged_ids
+from .combos import find_combos
 
 DECK_SIZE = 100
 ENTRY = re.compile(r"(?:(\d+)x?\s+)?(.+)", re.IGNORECASE)
@@ -28,10 +30,16 @@ RULE_KEYS = {
     "budget": (int, float),
     "max_card_price": (int, float),
     "max_game_changers": (int,),
+    "max_infinite_combos": (int,),
+    "max_combos": (int,),
     "not_together": (list,),
     "banned": (list,),
     "limits": (dict,),
+    "minimums": (dict,),
 }
+# Names a limit or minimum may use for a card type instead of a tag.
+TYPE_NAMES = {name: kind for kind in CARD_TYPES for name in (kind.lower(), kind.lower() + "s")}
+TYPE_NAMES["sorceries"] = "Sorcery"
 
 
 def check_rules(rules: dict) -> dict:
@@ -43,8 +51,9 @@ def check_rules(rules: dict) -> dict:
             raise CardDataError(f"Deck rule {key!r} has the wrong kind of value: {value!r}")
     if not all(isinstance(group, list) and len(group) >= 2 for group in rules.get("not_together", [])):
         raise CardDataError("not_together takes lists of two or more card names, e.g. [[\"A\", \"B\"]]")
-    if not all(isinstance(limit, int) and not isinstance(limit, bool) for limit in rules.get("limits", {}).values()):
-        raise CardDataError("Each entry under [limits] is a tag and the most cards allowed, e.g. board-wipe = 2")
+    for table in ("limits", "minimums"):
+        if not all(isinstance(count, int) and not isinstance(count, bool) for count in rules.get(table, {}).values()):
+            raise CardDataError(f"Each entry under [{table}] is a tag or card type and a number of cards, e.g. ramp = 10")
     return rules
 
 
@@ -96,12 +105,14 @@ def _prices_as_of() -> str | None:
     """The date of the downloaded card data, which is when its prices were current."""
     try:
         manifest = json.loads((DATA_DIR / "manifest.json").read_text(encoding="utf-8"))
-        return manifest["scryfall/oracle-cards.jsonl.gz"]["version"][:10]
+        return manifest["scryfall/default-cards.jsonl.gz"]["version"][:10]
     except (OSError, ValueError, KeyError):
         return None
 
 
-def _rule_results(db: sqlite3.Connection, rules: dict, rows: dict, quantities: dict, total: float) -> list[dict]:
+def _rule_results(
+    db: sqlite3.Connection, rules: dict, rows: dict, quantities: dict, total: float, combos: list[dict],
+) -> list[dict]:
     """One entry per deck rule, saying whether it holds and which cards are involved."""
     results = []
 
@@ -120,17 +131,32 @@ def _rule_results(db: sqlite3.Connection, rules: dict, rows: dict, quantities: d
         changers = [name for name, row in rows.items() if row["game_changer"]]
         allowed = rules["max_game_changers"]
         add("max_game_changers", len(changers) <= allowed, f"{len(changers)} of {allowed} allowed", changers)
+    # Only combos known to be complete count; one that may be complete is a warning instead.
+    for rule, counted in (("max_infinite_combos", [c for c in combos if c["infinite"]]), ("max_combos", combos)):
+        if rule in rules:
+            add(rule, len(counted) <= rules[rule], f"{len(counted)} of {rules[rule]} allowed",
+                [" + ".join(combo["cards"]) for combo in counted])
     for group in rules.get("not_together", []):
         present = [name for name in map(named, group) if name in rows]
         add("not_together", len(present) < len(group), " + ".join(group), present)
     if "banned" in rules:
         present = [name for name in map(named, rules["banned"]) if name in rows]
         add("banned", not present, "cards this deck must not contain", present)
-    for tag, allowed in rules.get("limits", {}).items():
-        tagged = tagged_ids(db, tag)
-        present = [name for name, row in rows.items() if row["oracle_id"] in tagged]
+    def counted(kind: str) -> list[str]:
+        """Cards of a type such as 'lands', or carrying a tag such as 'ramp'."""
+        if kind.lower() in TYPE_NAMES:
+            return [name for name, row in rows.items()
+                    if TYPE_NAMES[kind.lower()] in row["type_line"].split(" // ")[0]]
+        tagged = tagged_ids(db, kind)
+        return [name for name, row in rows.items() if row["oracle_id"] in tagged]
+
+    for kind, allowed in rules.get("limits", {}).items():
+        present = counted(kind)
         count = sum(quantities[name] for name in present)
-        add(f"limit {tag}", count <= allowed, f"{count} of {allowed} allowed", present)
+        add(f"limit {kind}", count <= allowed, f"{count} of {allowed} allowed", present)
+    for kind, needed in rules.get("minimums", {}).items():
+        count = sum(quantities[name] for name in counted(kind))
+        add(f"minimum {kind}", count >= needed, f"{count} of at least {needed}")
     return results
 
 
@@ -197,7 +223,11 @@ def validate_deck(
         else:
             prices[name] = row["price_usd"]
     total = round(sum(price * quantities[name] for name, price in prices.items()), 2)
-    rule_results = _rule_results(db, check_rules(rules or {}), rows, quantities, total)
+    combos = find_combos(
+        {row["oracle_id"]: quantities[name] for name, row in rows.items()},
+        {rows[name]["oracle_id"] for name in commander_names}, identity,
+    )
+    rule_results = _rule_results(db, check_rules(rules or {}), rows, quantities, total, combos["included"])
 
     errors = {
         "count": None if card_count == DECK_SIZE
@@ -216,6 +246,11 @@ def validate_deck(
     unpriced = [name for name in no_price if "Basic" not in rows[name]["type_line"]]
     if unpriced and any(key in (rules or {}) for key in ("budget", "max_card_price")):
         warnings.append(f"Price rules cannot be confirmed: no price for {', '.join(unpriced)}.")
+    warnings += [
+        f"Possible {combo['kind']} combo: {' + '.join(combo['cards'])} + any {' + any '.join(combo['requires'])}. "
+        f"Whether the deck holds such a card is not checked. {combo['url']}"
+        for combo in combos["unverified"]
+    ]
     return {
         "valid": not any(errors.values()) and all(result["ok"] for result in rule_results),
         "commanders": commander_names,
@@ -224,6 +259,7 @@ def validate_deck(
         "errors": errors,
         "rules": rule_results,
         "warnings": warnings,
+        "combos": combos,
         "stats": _stats(db, rows, quantities),
         "budget": {
             "total_usd": total,

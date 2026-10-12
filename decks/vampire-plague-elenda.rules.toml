@@ -1,9 +1,22 @@
-# Rules from decks/briefs/vampire-plague-elenda.md, in a form `mtg check` enforces.
+# Rules for The Vampire Plague: the brief's own constraints (decks/briefs/vampire-plague-elenda.md)
+# on top of the casual baseline in skills/commander-deck/rules-template.toml.
+
 commander = "Elenda, the Dusk Rose"
 budget = 150
+max_game_changers = 0
+max_infinite_combos = 0
 not_together = [["Sanguine Bond", "Exquisite Blood"]]
 
 [limits]
-board-wipe = 2
+board-wipe = 2                  # the brief: one or two at most
 mass-land-denial = 0
 extra-turn = 0
+tapland = 8
+
+[minimums]
+lands = 36
+ramp = 10
+card-advantage = 12
+spot-removal = 6
+protection = 2
+hate-graveyard = 1

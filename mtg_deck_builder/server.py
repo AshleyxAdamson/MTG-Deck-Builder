@@ -11,7 +11,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
-from . import cards, decks
+from . import cards, decks, edhrec
 
 server = MCPServer(
     "mtg-cards",
@@ -19,7 +19,7 @@ server = MCPServer(
         "Local Magic: The Gathering card database (Scryfall Oracle data, one entry per unique card). "
         "Use search_cards to find cards for a deck, get_card for one card's full details, "
         "get_rulings for official rulings, find_tags to discover community tags such as board-wipe, ramp or "
-        "sacrifice-outlet, and validate_deck to check a Commander list against the format and the deck's own "
+        "sacrifice-outlet, commander_ideas for what other players run with a commander, and validate_deck to check a Commander list against the format and the deck's own "
         "rules. search_cards returns only Commander-legal cards by default; "
         "pass legal_in with another format name to search that format instead, or legal_in='any' to "
         "search every card regardless of legality. For Commander, always pass the commander's colors as "
@@ -62,8 +62,8 @@ def search_cards(
     toughness_max: Annotated[float | None, Field(description="Highest toughness.")] = None,
     price_min: Annotated[float | None, Field(description="Lowest price in US dollars.")] = None,
     price_max: Annotated[float | None, Field(
-        description="Highest price in US dollars. Cards with no price never match a price filter. The price is "
-                    "for one recent printing, not necessarily the cheapest.")] = None,
+        description="Highest price in US dollars. A card's price is its cheapest paper printing. Cards with "
+                    "no price never match a price filter.")] = None,
     keywords: Annotated[list[str] | None, Field(
         description="Keyword abilities the card must all have, e.g. ['Flying', 'Deathtouch'].")] = None,
     tags: Annotated[list[str] | None, Field(
@@ -136,6 +136,27 @@ def find_tags(
 
 
 @server.tool()
+def commander_ideas(
+    commander: Annotated[str, Field(description="The commander's exact name.")],
+    theme: Annotated[str | None, Field(
+        description="Narrow to one theme of this commander's decks, e.g. 'vampires' or 'aristocrats'. "
+                    "The themes available are listed in every result.")] = None,
+    per_list: Annotated[int, Field(description="Cards to return per list.")] = 12,
+    price_max: Annotated[float | None, Field(description="Leave out cards above this price in US dollars.")] = None,
+) -> dict:
+    """What other players run with a commander, from EDHREC's statistics over thousands of decks.
+
+    Returns lists such as top cards, high-synergy cards and cards by type, each with the share of decks
+    running it, its synergy score and our price; plus the commander's themes, the average deck's type
+    counts, how its decks spread across power brackets, and the combos most often played with it.
+    Use it for ideas, then apply the deck's own rules: popular is not the same as right for a casual
+    or budget brief. Needs the internet the first time a commander or theme is looked up.
+    """
+    with card_index() as db:
+        return edhrec.commander_ideas(db, commander, theme=theme, per_list=per_list, price_max=price_max)
+
+
+@server.tool()
 def validate_deck(
     commanders: Annotated[list[str], Field(
         description="The commander's exact name; two names for partners or a commander with a background.")],
@@ -144,9 +165,13 @@ def validate_deck(
                     "The commander may be included or left out; it is counted once either way.")],
     rules: Annotated[dict | None, Field(
         description="The deck's own rules, usually from its brief. Keys, all optional: budget (max total USD), "
-                    "max_card_price (USD), max_game_changers (count), not_together (lists of card names that "
+                    "max_card_price (USD), max_game_changers (count), max_infinite_combos (most known infinite "
+                    "combos the deck may hold; 0 for 'no infinite combos'), max_combos (the same, counting every "
+                    "known combo: also near-infinite loops, instant wins and locks), not_together (lists of card names that "
                     "must not all be in the deck, e.g. [['Sanguine Bond', 'Exquisite Blood']]), banned (card "
-                    "names), limits (tag -> most cards allowed, e.g. {'board-wipe': 2, 'extra-turn': 0}).")] = None,
+                    "names), limits (tag or card type -> most cards allowed, e.g. {'board-wipe': 2, "
+                    "'extra-turn': 0}), minimums (tag or card type -> fewest cards, e.g. {'lands': 36, "
+                    "'ramp': 10}).")] = None,
 ) -> dict:
     """Check a Commander deck: exactly 100 cards, one copy of each card except basic lands, every card
     inside the commanders' color identity and legal in Commander, and every name a real card.
@@ -154,7 +179,17 @@ def validate_deck(
     Reports all problems at once, with close matches for unknown names. `rules` holds one entry per deck
     rule with ok true or false; `stats` counts card types and tagged roles (ramp, card-advantage, removal,
     sweeper); `budget` gives the total price and most expensive cards. `valid` is true only when the format
-    checks and every rule pass. It cannot detect combos or judge how the deck plays.
+    checks and every rule pass.
+
+    `combos` lists the known combos from Commander Spellbook: `included` (every card is in the deck),
+    `unverified` (every named card is in the deck, and the combo also needs any card of a kind named in
+    `requires`, such as a persist creature, which is not checked; also given as a warning) and
+    `one_card_away` (the most popular combos, within the commanders' colors, that adding the card in
+    `missing` would complete; `one_card_away_total` counts them all). Each combo has its cards, results,
+    prerequisites, a link, and `kind`: 'infinite', 'near-infinite' (a loop that runs out) or 'finite' (an
+    instant win or lock). Only complete, `included` combos count against max_infinite_combos and max_combos.
+    The list holds combos people have submitted: none found means no known combo, not proof there is none.
+    It cannot judge how the deck plays.
     """
     with card_index() as db:
         return decks.validate_deck(db, commanders, decks.parse_decklist("\n".join(cards_in_deck)), rules)

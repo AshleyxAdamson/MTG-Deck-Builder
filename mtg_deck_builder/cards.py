@@ -18,7 +18,8 @@ DATA_DIR = Path(os.environ.get("MTG_DATA_DIR") or Path(__file__).resolve().paren
 CARDS_FILE = DATA_DIR / "scryfall" / "oracle-cards.jsonl.gz"
 RULINGS_FILE = DATA_DIR / "scryfall" / "rulings.jsonl.gz"
 TAGS_FILE = DATA_DIR / "scryfall" / "oracle-tags.jsonl.gz"
-SOURCE_FILES = (CARDS_FILE, RULINGS_FILE, TAGS_FILE)
+PRINTINGS_FILE = DATA_DIR / "scryfall" / "default-cards.jsonl.gz"
+SOURCE_FILES = (CARDS_FILE, RULINGS_FILE, TAGS_FILE, PRINTINGS_FILE)
 INDEX_FILE = DATA_DIR / "cards.sqlite"
 
 COLORS = "WUBRG"
@@ -40,13 +41,13 @@ SORTS = {
 MAX_LIMIT = 100
 
 # Bump when the tables change, so existing indexes are rebuilt.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SCHEMA = """
 CREATE TABLE cards (
     oracle_id TEXT, name TEXT COLLATE NOCASE, is_extra INTEGER, mana_cost TEXT, cmc REAL,
     type_line TEXT, oracle_text TEXT, power TEXT, toughness TEXT, loyalty TEXT,
     power_num REAL, toughness_num REAL, colors TEXT, color_identity TEXT,
-    keywords TEXT, legalities TEXT, faces TEXT, price_usd REAL, price_usd_foil REAL,
+    keywords TEXT, legalities TEXT, faces TEXT, price_usd REAL, price_printing TEXT,
     game_changer INTEGER, rarity TEXT, set_code TEXT, set_name TEXT, released_at TEXT,
     edhrec_rank INTEGER, scryfall_uri TEXT, produced_mana TEXT
 );
@@ -92,7 +93,29 @@ def _to_number(value):
         return None
 
 
-def _card_row(card: dict) -> dict:
+def _cheapest_prices() -> dict[str, tuple[float, str]]:
+    """The lowest US dollar price of each card across its printings, and which printing that is.
+
+    The Oracle file prices only the newest printing, which is often an unreleased or
+    digital one with no price at all. Printings that are not real, playable paper cards
+    (oversized, gold-bordered, collector's editions) only count when nothing else is priced.
+    """
+    cheapest: dict[str, tuple[bool, float, str]] = {}
+    for printing in _read_jsonl(PRINTINGS_FILE):
+        prices = [float(printing["prices"][key]) for key in ("usd", "usd_foil", "usd_etched")
+                  if printing["prices"].get(key)]
+        if not prices or "paper" not in printing["games"]:
+            continue
+        oracle_id = printing.get("oracle_id") or printing["card_faces"][0].get("oracle_id")
+        novelty = (printing["oversized"] or printing["border_color"] == "gold"
+                   or printing["set_type"] == "memorabilia")
+        offer = (novelty, min(prices), printing["set_name"])
+        if oracle_id not in cheapest or offer < cheapest[oracle_id]:
+            cheapest[oracle_id] = offer
+    return {oracle_id: (price, set_name) for oracle_id, (_, price, set_name) in cheapest.items()}
+
+
+def _card_row(card: dict, cheapest: dict[str, tuple[float, str]]) -> dict:
     """Flatten a Scryfall card, pulling from its faces what the card itself lacks.
 
     Split, adventure and double-faced cards keep rules text, and sometimes mana
@@ -113,7 +136,7 @@ def _card_row(card: dict) -> dict:
     colors = card.get("colors")
     if colors is None:
         colors = {c for f in faces for c in f.get("colors") or []}
-    prices = card.get("prices") or {}
+    price, price_printing = cheapest.get(card["oracle_id"], (None, None))
     power, toughness = front("power"), front("toughness")
     return {
         "oracle_id": card["oracle_id"],
@@ -133,8 +156,8 @@ def _card_row(card: dict) -> dict:
         "keywords": json.dumps(card.get("keywords") or []),
         "legalities": json.dumps(card.get("legalities") or {}),
         "faces": json.dumps([{k: f[k] for k in FACE_FIELDS if f.get(k)} for f in faces]) if faces else None,
-        "price_usd": _to_number(prices.get("usd")),
-        "price_usd_foil": _to_number(prices.get("usd_foil")),
+        "price_usd": price,
+        "price_printing": price_printing,
         "game_changer": int(bool(card.get("game_changer"))),
         "rarity": card.get("rarity"),
         "set_code": card.get("set"),
@@ -180,11 +203,12 @@ def build_index(stamp: str) -> None:
     db = sqlite3.connect(part)
     try:
         formats: set[str] = set()
+        cheapest = _cheapest_prices()
 
         def card_rows():
             for card in _read_jsonl(CARDS_FILE):
                 formats.update(card.get("legalities") or {})
-                yield _card_row(card)
+                yield _card_row(card, cheapest)
 
         with db:
             db.executescript(SCHEMA)
@@ -439,7 +463,7 @@ def get_card(db: sqlite3.Connection, name: str) -> dict:
         "keywords": json.loads(row["keywords"]),
         "legal_in": sorted(f for f, status in legalities.items() if status in ("legal", "restricted")),
         "banned_in": sorted(f for f, status in legalities.items() if status == "banned"),
-        "price_usd_foil": row["price_usd_foil"],
+        "price_printing": row["price_printing"],
         "rarity": row["rarity"],
         "set": row["set_name"],
         "released_at": row["released_at"],

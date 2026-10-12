@@ -1,10 +1,10 @@
-# The Vampire Plague (Elenda) - DRAFT for review
+# The Vampire Plague (Elenda)
 # Brief: decks/briefs/vampire-plague-elenda.md   Notes: decks/vampire-plague-elenda.md
 
 # Commander (1)
 1 Elenda, the Dusk Rose
 
-# Ramp (8)
+# Ramp (9)
 1 Sol Ring
 1 Arcane Signet
 1 Orzhov Signet
@@ -13,16 +13,16 @@
 1 Pillar of Origins
 1 Patchwork Banner
 1 Herald's Horn
+1 Wayfarer's Bauble
 
-# Card draw (8)
+# Card draw (7)
 1 Welcoming Vampire
 1 Champion of Dusk
-1 Dusk Legion Zealot
+1 Clavileño, First of the Blessed
 1 Twilight Prophet
 1 Scheming Silvertongue
 1 Skullclamp
 1 Vanquisher's Banner
-1 Pact of the Serpent
 
 # Removal (7 spot removal + 2 board wipes)
 1 Swords to Plowshares
@@ -32,41 +32,40 @@
 1 Mortify
 1 Despark
 1 Generous Gift
+# Protection (1)
+1 Unbreakable Formation
 # Board wipes (2 of the 2 allowed)
 1 Kindred Dominance
 1 Olivia's Wrath
 
-# Raise-their-dead package (6)
+# Raise-their-dead package (4, plus Sorin, Lord of Innistrad's last ability)
 1 Animate Dead
 1 Rise from the Grave
 1 Beacon of Unrest
-1 Debtors' Knell
-1 Sepulchral Primordial
 1 Rise of the Dark Realms
 
-# Vampires: lords and anthems (7)
+# Lords and anthems (7)
 1 Legion Lieutenant
 1 Captivating Vampire
 1 Edgar, Charmed Groom
 1 Markov Baron
-1 Thirsting Bloodlord
 1 Bloodline Keeper
 1 Vampire Nocturnus
+1 Etchings of the Chosen
 
-# Vampires: token makers, sac outlets, lifelink (11)
+# Vampires: token makers, sacrifice outlets, lifelink (10)
 1 Mavren Fein, Dusk Apostle
 1 Elenda's Hierophant
 1 Baron Bertram Graywater
-1 Martyr of Dusk
-1 Preacher of the Schism
+1 Bartolomé del Presidio
+1 Yahenni, Undying Partisan
+1 Carmen, Cruel Skymarcher
 1 Viscera Seer
 1 Bloodthrone Vampire
 1 Henrika Domnathi
-1 Vampire Nighthawk
-1 Crossway Troublemakers
 1 Indulging Patrician
 
-# Payoffs: drain (8, all vampires)
+# Payoffs: drain and death triggers (9)
 1 Blood Artist
 1 Cruel Celebrant
 1 Falkenrath Noble
@@ -75,16 +74,17 @@
 1 Vito, Thorn of the Dusk Rose
 1 Wispdrinker Vampire
 1 Malakir Bloodwitch
+1 Teysa Karlov
 
-# Payoffs: tokens and token multipliers (6)
+# Tokens and token multipliers (6)
 1 Legion's Landing
 1 Sorin, Lord of Innistrad
 1 Sorin, Imperious Bloodlord
-1 Call to the Feast
-1 Kaya, Geist Hunter
+1 March of the Canonized
+1 Ojer Taq, Deepest Foundation
 1 Renewed Solidarity
 
-# Lands (36)
+# Lands (37)
 1 Command Tower
 1 Path of Ancestry
 1 Exotic Orchard
@@ -96,10 +96,10 @@
 1 Tainted Field
 1 Shineshadow Snarl
 1 Temple of Silence
-1 Scoured Barrens
+1 Bojuka Bog
 1 Orzhov Basilica
 1 Unclaimed Territory
 1 Voldaren Estate
 1 Vault of the Archangel
-11 Swamp
-9 Plains
+13 Swamp
+8 Plains
