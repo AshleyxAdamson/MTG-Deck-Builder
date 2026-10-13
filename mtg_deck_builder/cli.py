@@ -120,16 +120,21 @@ def export(args: argparse.Namespace) -> None:
     """Print the deck as a bare list for pasting into Moxfield or another deck site.
 
     Those importers read a blank line as the start of the sideboard and do not know
-    our `#` headers, so the output has neither. Commanders come first.
+    our `#` headers, so the output has neither. The commander is left out, because
+    Moxfield keeps it in its own slot and would count a pasted one as a 101st card.
     """
     entries, _, commanders = load_deck(args)
     quantities: dict[str, int] = {}
     for quantity, name in entries:
         quantities[name] = quantities.get(name, 0) + quantity
     leading = {name.lower() for name in commanders}
-    print("\n".join(
-        [f"1 {name}" for name in commanders]
-        + [f"{quantity} {name}" for name, quantity in quantities.items() if name.lower() not in leading]))
+    cards_only = [f"{quantity} {name}" for name, quantity in quantities.items() if name.lower() not in leading]
+    if args.with_commander:
+        cards_only = [f"1 {name}" for name in commanders] + cards_only
+    elif commanders:
+        # stderr, so piping the list to the clipboard leaves this note behind.
+        print(f"Commander, to set on the site: {' + '.join(commanders)}", file=sys.stderr)
+    print("\n".join(cards_only))
 
 
 def run(args: argparse.Namespace) -> None:
@@ -265,7 +270,8 @@ def main() -> None:
     check.add_argument("--rules", help="deck rules file (default: the decklist's name with .rules.toml)")
     paste = commands.add_parser("export", help="print a decklist ready to paste into Moxfield or another deck site")
     paste.add_argument("decklist")
-    paste.add_argument("--commander", action="append", help="commander name, listed first")
+    paste.add_argument("--commander", action="append", help="commander name, left out of the list")
+    paste.add_argument("--with-commander", action="store_true", help="list the commander first instead of leaving it out")
     paste.add_argument("--rules", help="deck rules file to read the commander from")
     refresh = commands.add_parser("update", help="download the latest data and refresh the index")
     refresh.add_argument("--force", action="store_true", help="download even if the local files are current")

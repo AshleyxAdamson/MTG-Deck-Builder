@@ -86,7 +86,7 @@ uv run mtg update
 
 `--brief` prints one line per card. `uv run mtg tags` lists tags matching the words given.
 
-`uv run mtg export` prints a decklist as a bare `1 Card Name` list, commander first, for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
+`uv run mtg export` prints a decklist as a bare `1 Card Name` list for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). The commander is left out, since Moxfield holds it in its own slot and counts a pasted one as an extra card; `--with-commander` lists it first for sites that want it. Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
 
 `uv run mtg ideas` is the one command that needs the internet. EDHREC has no bulk download, so each commander's page is fetched on first use and cached in `data/edhrec/` for a week. It reads an unofficial endpoint that could change.
 
