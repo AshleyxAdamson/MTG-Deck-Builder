@@ -1,6 +1,7 @@
 # The Vampire Plague (Elenda): notes
 
 Decklist: `decks/vampire-plague-elenda.txt`. Brief: `decks/briefs/vampire-plague-elenda.md`. Rules: `decks/vampire-plague-elenda.rules.toml`.
+The decklist pastes into Moxfield as is. Set the commander in Moxfield's commander slot.
 A working list for review, not a locked one. Card facts and prices come from the local `mtg` tool (prices as of 2026-10-12, each card's cheapest paper printing).
 
 Shape: 100 cards, $183.18. 37 lands, 11 ramp, 29 creatures (27 of them Vampires, counting Elenda), 2 planeswalkers. Average mana value of nonland cards is 3.06.
@@ -15,6 +16,21 @@ Shape: 100 cards, $183.18. 37 lands, 11 ramp, 29 creatures (27 of them Vampires,
 - **Cards keep flowing** from Welcoming Vampire, Champion of Dusk, Clavileño, Twilight Prophet, Scheming Silvertongue, Skullclamp on 1/1 tokens, Vanquisher's Banner and Baron Bertram Graywater.
 
 Opponents can see all of it coming: it is a creature board that loses to blockers, racing and a wrath. Unbreakable Formation, Clever Concealment and Duty Beyond Death save the board from a wrath, and Etchings of the Chosen protects one creature.
+
+## Cards by role
+
+- **Commander (1):** Elenda, the Dusk Rose
+- **Ramp (11):** Sol Ring; Arcane Signet; Orzhov Signet; Talisman of Hierarchy; Mind Stone; Pillar of Origins; Patchwork Banner; Herald's Horn; Wayfarer's Bauble; Fellwar Stone; Charcoal Diamond
+- **Card draw (7):** Welcoming Vampire; Champion of Dusk; Clavileño, First of the Blessed; Twilight Prophet; Scheming Silvertongue; Skullclamp; Vanquisher's Banner
+- **Removal (7 spot removal + 2 board wipes):** Swords to Plowshares; Path to Exile; Anguished Unmaking; Vindicate; Mortify; Despark; Generous Gift
+- **Protection (3):** Unbreakable Formation; Clever Concealment; Duty Beyond Death
+- **Board wipes (2 of the 2 allowed):** Kindred Dominance; Olivia's Wrath
+- **Raise-their-dead package (3, plus Sorin, Lord of Innistrad's last ability):** Animate Dead; Rise from the Grave; Rise of the Dark Realms
+- **Lords and anthems (6):** Legion Lieutenant; Captivating Vampire; Edgar, Charmed Groom; Markov Baron; Bloodline Keeper; Etchings of the Chosen
+- **Vampires: token makers, sacrifice outlets, lifelink (9):** Mavren Fein, Dusk Apostle; Elenda's Hierophant; Baron Bertram Graywater; Bartolomé del Presidio; Yahenni, Undying Partisan; Carmen, Cruel Skymarcher; Viscera Seer; Bloodthrone Vampire; Henrika Domnathi
+- **Payoffs: drain and death triggers (8):** Blood Artist; Cruel Celebrant; Falkenrath Noble; Sanctum Seeker; Cordial Vampire; Vito, Thorn of the Dusk Rose; Malakir Bloodwitch; Teysa Karlov
+- **Tokens and token multipliers (6):** Legion's Landing; Sorin, Lord of Innistrad; Sorin, Imperious Bloodlord; March of the Canonized; Ojer Taq, Deepest Foundation; Renewed Solidarity
+- **Lands (37):** Command Tower; Godless Shrine; Vault of Champions; Bleachbone Verge; Brightclimb Pathway; Path of Ancestry; Exotic Orchard; Isolated Chapel; Caves of Koilos; Shattered Sanctum; Concealed Courtyard; Fetid Heath; Tainted Field; Shineshadow Snarl; Temple of Silence; Bojuka Bog; Orzhov Basilica; Unclaimed Territory; Voldaren Estate; Vault of the Archangel; 11 Swamp; 6 Plains
 
 ## Brief compliance
 

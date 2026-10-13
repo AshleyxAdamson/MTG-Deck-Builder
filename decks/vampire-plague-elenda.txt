@@ -1,10 +1,3 @@
-# The Vampire Plague (Elenda)
-# Brief: decks/briefs/vampire-plague-elenda.md   Notes: decks/vampire-plague-elenda.md
-
-# Commander (1)
-1 Elenda, the Dusk Rose
-
-# Ramp (11)
 1 Sol Ring
 1 Arcane Signet
 1 Orzhov Signet
@@ -16,8 +9,6 @@
 1 Wayfarer's Bauble
 1 Fellwar Stone
 1 Charcoal Diamond
-
-# Card draw (7)
 1 Welcoming Vampire
 1 Champion of Dusk
 1 Clavileño, First of the Blessed
@@ -25,8 +16,6 @@
 1 Scheming Silvertongue
 1 Skullclamp
 1 Vanquisher's Banner
-
-# Removal (7 spot removal + 2 board wipes)
 1 Swords to Plowshares
 1 Path to Exile
 1 Anguished Unmaking
@@ -34,28 +23,20 @@
 1 Mortify
 1 Despark
 1 Generous Gift
-# Protection (3)
 1 Unbreakable Formation
 1 Clever Concealment
 1 Duty Beyond Death
-# Board wipes (2 of the 2 allowed)
 1 Kindred Dominance
 1 Olivia's Wrath
-
-# Raise-their-dead package (3, plus Sorin, Lord of Innistrad's last ability)
 1 Animate Dead
 1 Rise from the Grave
 1 Rise of the Dark Realms
-
-# Lords and anthems (6)
 1 Legion Lieutenant
 1 Captivating Vampire
 1 Edgar, Charmed Groom
 1 Markov Baron
 1 Bloodline Keeper
 1 Etchings of the Chosen
-
-# Vampires: token makers, sacrifice outlets, lifelink (9)
 1 Mavren Fein, Dusk Apostle
 1 Elenda's Hierophant
 1 Baron Bertram Graywater
@@ -65,8 +46,6 @@
 1 Viscera Seer
 1 Bloodthrone Vampire
 1 Henrika Domnathi
-
-# Payoffs: drain and death triggers (8)
 1 Blood Artist
 1 Cruel Celebrant
 1 Falkenrath Noble
@@ -75,16 +54,12 @@
 1 Vito, Thorn of the Dusk Rose
 1 Malakir Bloodwitch
 1 Teysa Karlov
-
-# Tokens and token multipliers (6)
 1 Legion's Landing
 1 Sorin, Lord of Innistrad
 1 Sorin, Imperious Bloodlord
 1 March of the Canonized
 1 Ojer Taq, Deepest Foundation
 1 Renewed Solidarity
-
-# Lands (37)
 1 Command Tower
 1 Godless Shrine
 1 Vault of Champions
