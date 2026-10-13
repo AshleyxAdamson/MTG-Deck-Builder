@@ -26,7 +26,7 @@ Local card search, deck checks and an MCP server for building Magic: The Gatheri
 5. Start a new Claude Code session in this folder and ask for a deck:
 
    ```text
-   Use the commander-deck skill to build the deck in decks/briefs/sphinx-oracle.md.
+   Use the commander-deck skill to build the deck in examples/brief.md.
    ```
 
 The rest of this file explains each part.
@@ -110,13 +110,13 @@ uv run mtg tags sacrifice outlet
 uv run mtg card "Unesh, Criosphinx Sovereign" "Sharuum the Hegemon"
 uv run mtg rulings "Blood Moon"
 uv run mtg ideas "Elenda, the Dusk Rose" --theme vampires --price "<=5"
-uv run mtg check decks/vampire-plague-elenda.txt
+uv run mtg check decks/my-deck.txt
 uv run mtg update
 ```
 
 `--brief` prints one line per card. `uv run mtg tags` lists tags matching the words given.
 
-A decklist in `decks/` is bare `N Card Name` lines: no `#` headers, no blank lines and no commander line. The commander lives in the deck's rules file as `commander`, and `mtg check` counts it as the 100th card. The whole file pastes into Moxfield as is (`pbcopy < decks/vampire-plague-elenda.txt` copies it), and you set the commander in Moxfield's own commander slot. Role groups go in the deck's notes. `mtg check` fails a file that isn't paste-ready and names each offending line.
+A decklist in `decks/` is bare `N Card Name` lines: no `#` headers, no blank lines and no commander line. The commander lives in the deck's rules file as `commander`, and `mtg check` counts it as the 100th card. The whole file pastes into Moxfield as is (`pbcopy < decks/my-deck.txt` copies it), and you set the commander in Moxfield's own commander slot. Role groups go in the deck's notes. `mtg check` fails a file that isn't paste-ready and names each offending line.
 
 `uv run mtg ideas` is the one command that needs the internet. EDHREC has no bulk download, so each commander's page is fetched on first use and cached in `data/edhrec/` for a week. It reads an unofficial endpoint that could change.
 
@@ -178,7 +178,11 @@ A clean result means the deck has no *known* combo. The list holds what people h
 
 The `commander-deck` Claude skill walks an agent from a deck brief to a checked decklist with the tools above: read the brief, write its rules file, set role counts, gather candidates, cut to 100, check, and review how the deck will feel at the table. It lives in this repo at `.claude/skills/commander-deck/`, with the baseline numbers for a casual deck and a starting rules file.
 
-Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file and notes in `decks/`. The evidence behind the skill's baseline and behind combo detection is in `docs/research/`.
+Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file and notes in `decks/`. `examples/brief.md` is a sample brief to start from.
+
+`decks/` is yours: this repo ignores it, so cloning brings no one else's decks and your own never land in a commit here. To keep history for them, make `decks/` its own git repo (`git init` inside it) and push it wherever you like.
+
+The evidence behind the skill's baseline and behind combo detection is in `docs/research/`.
 
 ### Network access
 
