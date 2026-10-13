@@ -52,6 +52,7 @@ def format_check(report: dict) -> str:
     errors, budget, known = report["errors"], report["budget"], report["combos"]
     lines = [f"{' + '.join(report['commanders'])}  [{report['color_identity']}]  {report['card_count']} cards"]
     lines += [f"  PROBLEM  {errors['count']}"] if errors["count"] else []
+    lines += [f"  PROBLEM  {message}" for message in errors["format"]]
     lines += [f"  PROBLEM  {d['quantity']} copies of {d['name']} (allowed: {d['allowed']})" for d in errors["duplicates"]]
     lines += [f"  PROBLEM  {c['name']} is outside the commander's colors [{c['color_identity']}]"
               for c in errors["off_identity"]]
@@ -102,47 +103,43 @@ def update(force: bool) -> None:
     print(f"{total} combos in the index")
 
 
-def load_deck(args: argparse.Namespace) -> tuple[list[tuple[int, str]], dict, list[str]]:
-    """A decklist's entries, its rules and its commanders, from the files and flags given."""
+def format_problems(text: str, commanders: list[str]) -> list[str]:
+    """Each line that would stop a decklist pasting into Moxfield as is, with its line number."""
+    leading = {name.lower() for name in commanders}
+    problems = []
+    for number, line in enumerate(text.rstrip().splitlines(), 1):
+        line = line.strip()
+        if not line:
+            reason = "is blank"
+        elif line.startswith(("#", "//")):
+            reason = "is a comment"
+        elif decks.parse_decklist(line)[0][1].lower() in leading:
+            reason = "names the commander, which belongs in the rules file"
+        else:
+            continue
+        problems.append(f"Line {number} {reason}. The decklist must paste into Moxfield as is.")
+    return problems
+
+
+def load_deck(args: argparse.Namespace) -> tuple[list[tuple[int, str]], dict, list[str], list[str]]:
+    """A decklist's entries, its rules, its commanders and its format problems, from the files and flags given."""
     decklist = Path(args.decklist)
     try:
-        entries = decks.parse_decklist(decklist.read_text(encoding="utf-8"))
+        text = decklist.read_text(encoding="utf-8")
     except OSError as error:
         raise cards.CardDataError(f"Cannot read {decklist}: {error.strerror}")
     # A deck's rules live next to it: elenda.txt is checked against elenda.rules.toml.
     rules_file = Path(args.rules) if args.rules else decklist.with_suffix(".rules.toml")
     rules = decks.load_rules(rules_file) if args.rules or rules_file.exists() else {}
     commanders = args.commander or rules.get("commander") or []
-    return entries, rules, [commanders] if isinstance(commanders, str) else commanders
-
-
-def export(args: argparse.Namespace) -> None:
-    """Print the deck as a bare list for pasting into Moxfield or another deck site.
-
-    Those importers read a blank line as the start of the sideboard and do not know
-    our `#` headers, so the output has neither. The commander is left out, because
-    Moxfield keeps it in its own slot and would count a pasted one as a 101st card.
-    """
-    entries, _, commanders = load_deck(args)
-    quantities: dict[str, int] = {}
-    for quantity, name in entries:
-        quantities[name] = quantities.get(name, 0) + quantity
-    leading = {name.lower() for name in commanders}
-    cards_only = [f"{quantity} {name}" for name, quantity in quantities.items() if name.lower() not in leading]
-    if args.with_commander:
-        cards_only = [f"1 {name}" for name in commanders] + cards_only
-    elif commanders:
-        # stderr, so piping the list to the clipboard leaves this note behind.
-        print(f"Commander, to set on the site: {' + '.join(commanders)}", file=sys.stderr)
-    print("\n".join(cards_only))
+    commanders = [commanders] if isinstance(commanders, str) else commanders
+    return decks.parse_decklist(text), rules, commanders, format_problems(text, commanders)
 
 
 def run(args: argparse.Namespace) -> None:
     # The download has to finish before the index is opened.
     if args.command == "update":
         return update(args.force)
-    if args.command == "export":
-        return export(args)
 
     with closing(cards.open_index()) as db:
         if args.command == "search":
@@ -173,10 +170,12 @@ def run(args: argparse.Namespace) -> None:
             result = edhrec.commander_ideas(
                 db, args.commander, theme=args.theme, per_list=args.per_list, price_max=bounds(args.price)[1])
         elif args.command == "check":
-            entries, rules, commanders = load_deck(args)
+            entries, rules, commanders, problems = load_deck(args)
             if not commanders:
                 raise cards.CardDataError("Name the commander with --commander, or as commander = \"...\" in the rules file.")
             result = decks.validate_deck(db, commanders, entries, rules)
+            result["errors"]["format"] = problems
+            result["valid"] = result["valid"] and not problems
         else:
             result = cards.get_rulings(db, args.name)
 
@@ -268,11 +267,6 @@ def main() -> None:
     check.add_argument("--commander", action="append",
                        help="commander name (give twice for partners or a background)")
     check.add_argument("--rules", help="deck rules file (default: the decklist's name with .rules.toml)")
-    paste = commands.add_parser("export", help="print a decklist ready to paste into Moxfield or another deck site")
-    paste.add_argument("decklist")
-    paste.add_argument("--commander", action="append", help="commander name, left out of the list")
-    paste.add_argument("--with-commander", action="store_true", help="list the commander first instead of leaving it out")
-    paste.add_argument("--rules", help="deck rules file to read the commander from")
     refresh = commands.add_parser("update", help="download the latest data and refresh the index")
     refresh.add_argument("--force", action="store_true", help="download even if the local files are current")
 

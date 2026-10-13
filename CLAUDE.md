@@ -12,6 +12,6 @@ Three things must be in place on this machine. When one is missing, follow "Sett
 
 ## Where things go
 
-- A deck is three files in `decks/`: `<name>.txt` (the decklist), `<name>.rules.toml` (its rules for `mtg check`) and `<name>.md` (notes). Its brief is `decks/briefs/<name>.md`.
+- A deck is three files in `decks/`: `<name>.txt` (the decklist), `<name>.rules.toml` (its rules for `mtg check`) and `<name>.md` (notes). Its brief is `decks/briefs/<name>.md`. The `.txt` is only `N Card Name` lines (no headers, comments, blank lines or commander line) so it pastes into Moxfield as is, and `mtg check` fails it otherwise; role groups go in the notes.
 - `data/` is downloaded, never committed; `uv run mtg update` refreshes it.
 - There is no test suite. Verify a code change by running the commands against the real data.

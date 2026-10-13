@@ -111,13 +111,12 @@ uv run mtg card "Unesh, Criosphinx Sovereign" "Sharuum the Hegemon"
 uv run mtg rulings "Blood Moon"
 uv run mtg ideas "Elenda, the Dusk Rose" --theme vampires --price "<=5"
 uv run mtg check decks/vampire-plague-elenda.txt
-uv run mtg export decks/vampire-plague-elenda.txt | pbcopy
 uv run mtg update
 ```
 
 `--brief` prints one line per card. `uv run mtg tags` lists tags matching the words given.
 
-`uv run mtg export` prints a decklist as a bare `1 Card Name` list for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). The commander is left out, since Moxfield holds it in its own slot and counts a pasted one as an extra card; `--with-commander` lists it first for sites that want it. Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
+A decklist in `decks/` is bare `N Card Name` lines: no `#` headers, no blank lines and no commander line. The commander lives in the deck's rules file as `commander`, and `mtg check` counts it as the 100th card. The whole file pastes into Moxfield as is (`pbcopy < decks/vampire-plague-elenda.txt` copies it), and you set the commander in Moxfield's own commander slot. Role groups go in the deck's notes. `mtg check` fails a file that isn't paste-ready and names each offending line.
 
 `uv run mtg ideas` is the one command that needs the internet. EDHREC has no bulk download, so each commander's page is fetched on first use and cached in `data/edhrec/` for a week. It reads an unofficial endpoint that could change.
 
@@ -127,7 +126,7 @@ Add `--json` before the subcommand for JSON output. `uv run mtg search --help` l
 
 ### Checking a deck
 
-`uv run mtg check` reads a decklist with one `1 Card Name` per line (`#` starts a comment) and reports every problem at once, along with card-type counts, average mana value, how many cards are tagged ramp, card advantage, removal and board wipe, the total price, and the known combos the deck holds or is one card away from. It exits with status 1 when the deck is not valid.
+`uv run mtg check` reads a decklist with one `1 Card Name` per line and reports every problem at once, including any line that keeps it from pasting into Moxfield as is (a `#` or `//` comment, a blank line, the commander), along with card-type counts, average mana value, how many cards are tagged ramp, card advantage, removal and board wipe, the total price, and the known combos the deck holds or is one card away from. It exits with status 1 when the deck is not valid.
 
 A deck's own rules go in a TOML file next to the decklist with the same name: `elenda.txt` is checked against `elenda.rules.toml` (or pass `--rules`). Every key is optional:
 
