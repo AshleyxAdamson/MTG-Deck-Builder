@@ -17,10 +17,10 @@ Local card search, deck checks and an MCP server for building Magic: The Gatheri
    claude mcp add --scope user mtg-cards -- uv run --directory "$PWD" mtg-mcp
    ```
 
-4. Get the `commander-deck` skill, which lives in the [dev-tools](https://github.com/AshleyxAdamson/dev-tools) repo. Clone or update `~/dev-tools`, then run its health check, which links every skill into `~/.claude/skills/`:
+4. The `commander-deck` skill comes with this repo, in `.claude/skills/commander-deck/`, and Claude Code loads it in any session started in this folder. To use it from other folders too, link it into your own skills:
 
    ```bash
-   ~/dev-tools/bin/check-dev-tools-health.sh
+   mkdir -p ~/.claude/skills && ln -s "$PWD/.claude/skills/commander-deck" ~/.claude/skills/commander-deck
    ```
 
 5. Start a new Claude Code session in this folder and ask for a deck:
@@ -176,7 +176,7 @@ A clean result means the deck has no *known* combo. The list holds what people h
 
 ## Building decks
 
-The `commander-deck` Claude skill walks an agent from a deck brief to a checked decklist with the tools above: read the brief, write its rules file, set role counts, gather candidates, cut to 100, check, and review how the deck will feel at the table. It lives in the [dev-tools](https://github.com/AshleyxAdamson/dev-tools) repo at `skills/commander-deck/`, with the baseline numbers for a casual deck and a starting rules file, and is linked into `~/.claude/skills/` from there.
+The `commander-deck` Claude skill walks an agent from a deck brief to a checked decklist with the tools above: read the brief, write its rules file, set role counts, gather candidates, cut to 100, check, and review how the deck will feel at the table. It lives in this repo at `.claude/skills/commander-deck/`, with the baseline numbers for a casual deck and a starting rules file.
 
 Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file and notes in `decks/`. The evidence behind the skill's baseline and behind combo detection is in `docs/research/`.
 

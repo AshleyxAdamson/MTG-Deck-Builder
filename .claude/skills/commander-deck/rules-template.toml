@@ -1,0 +1,25 @@
+# Starting rules for a casual (Bracket 2) Commander deck. Copy next to the decklist as
+# <decklist name>.rules.toml, then change the numbers to fit the brief and the archetype
+# (see baseline.md). Counts by tag run a little high, so the tag minimums sit above the
+# guide numbers.
+
+commander = "Commander Name"
+budget = 150                    # the brief's budget, in US dollars
+max_game_changers = 0
+max_infinite_combos = 0
+# not_together = [["Card A", "Card B"]]
+# banned = ["Card the brief rules out"]
+
+[limits]
+board-wipe = 3                  # lower to the brief's cap
+mass-land-denial = 0
+extra-turn = 0
+tapland = 8
+
+[minimums]
+lands = 36                      # 37 to 38 is the target; 39+ for big mana or X spells
+ramp = 10                       # about 8 real ramp cards
+card-advantage = 12             # about 10 real
+spot-removal = 6
+protection = 2                  # 4 for go-wide and commander-centric decks
+hate-graveyard = 1
