@@ -1,5 +1,36 @@
 # MTG Deck Builder
 
+Local card search, deck checks and an MCP server for building Magic: The Gathering Commander decks with an agent.
+
+## Setting up on a new machine
+
+1. Install [uv](https://docs.astral.sh/uv/) (`brew install uv` on a Mac) and the Claude Code CLI.
+2. Clone this repo, and from its root download the data and build the indexes. This fetches about 145 MB into `data/`:
+
+   ```bash
+   uv run mtg update
+   ```
+
+3. Register the MCP server with Claude Code, for every project on the machine:
+
+   ```bash
+   claude mcp add --scope user mtg-cards -- uv run --directory "$PWD" mtg-mcp
+   ```
+
+4. Get the `commander-deck` skill, which lives in the [dev-tools](https://github.com/AshleyxAdamson/dev-tools) repo. Clone or update `~/dev-tools`, then run its health check, which links every skill into `~/.claude/skills/`:
+
+   ```bash
+   ~/dev-tools/bin/check-dev-tools-health.sh
+   ```
+
+5. Start a new Claude Code session in this folder and ask for a deck:
+
+   ```text
+   Use the commander-deck skill to build the deck in decks/briefs/sphinx-oracle.md.
+   ```
+
+The rest of this file explains each part.
+
 ## Data
 
 Card and rules data is downloaded on demand, not committed. Fetch it with:
@@ -86,7 +117,7 @@ uv run mtg update
 
 `--brief` prints one line per card. `uv run mtg tags` lists tags matching the words given.
 
-`uv run mtg export` prints a decklist as a bare `1 Card Name` list, commander first, for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
+`uv run mtg export` prints a decklist as a bare `1 Card Name` list for pasting into Moxfield or another deck site (`| pbcopy` puts it on the clipboard). The commander is left out, since Moxfield holds it in its own slot and counts a pasted one as an extra card; `--with-commander` lists it first for sites that want it. Our decklists use `#` headings and blank lines between roles, and those sites read a blank line as the start of the sideboard.
 
 `uv run mtg ideas` is the one command that needs the internet. EDHREC has no bulk download, so each commander's page is fetched on first use and cached in `data/edhrec/` for a week. It reads an unofficial endpoint that could change.
 

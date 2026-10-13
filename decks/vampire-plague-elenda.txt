@@ -4,7 +4,7 @@
 # Commander (1)
 1 Elenda, the Dusk Rose
 
-# Ramp (9)
+# Ramp (11)
 1 Sol Ring
 1 Arcane Signet
 1 Orzhov Signet
@@ -14,6 +14,8 @@
 1 Patchwork Banner
 1 Herald's Horn
 1 Wayfarer's Bauble
+1 Fellwar Stone
+1 Charcoal Diamond
 
 # Card draw (7)
 1 Welcoming Vampire
@@ -32,28 +34,28 @@
 1 Mortify
 1 Despark
 1 Generous Gift
-# Protection (1)
+# Protection (3)
 1 Unbreakable Formation
+1 Clever Concealment
+1 Duty Beyond Death
 # Board wipes (2 of the 2 allowed)
 1 Kindred Dominance
 1 Olivia's Wrath
 
-# Raise-their-dead package (4, plus Sorin, Lord of Innistrad's last ability)
+# Raise-their-dead package (3, plus Sorin, Lord of Innistrad's last ability)
 1 Animate Dead
 1 Rise from the Grave
-1 Beacon of Unrest
 1 Rise of the Dark Realms
 
-# Lords and anthems (7)
+# Lords and anthems (6)
 1 Legion Lieutenant
 1 Captivating Vampire
 1 Edgar, Charmed Groom
 1 Markov Baron
 1 Bloodline Keeper
-1 Vampire Nocturnus
 1 Etchings of the Chosen
 
-# Vampires: token makers, sacrifice outlets, lifelink (10)
+# Vampires: token makers, sacrifice outlets, lifelink (9)
 1 Mavren Fein, Dusk Apostle
 1 Elenda's Hierophant
 1 Baron Bertram Graywater
@@ -63,16 +65,14 @@
 1 Viscera Seer
 1 Bloodthrone Vampire
 1 Henrika Domnathi
-1 Indulging Patrician
 
-# Payoffs: drain and death triggers (9)
+# Payoffs: drain and death triggers (8)
 1 Blood Artist
 1 Cruel Celebrant
 1 Falkenrath Noble
 1 Sanctum Seeker
 1 Cordial Vampire
 1 Vito, Thorn of the Dusk Rose
-1 Wispdrinker Vampire
 1 Malakir Bloodwitch
 1 Teysa Karlov
 
@@ -86,6 +86,10 @@
 
 # Lands (37)
 1 Command Tower
+1 Godless Shrine
+1 Vault of Champions
+1 Bleachbone Verge
+1 Brightclimb Pathway
 1 Path of Ancestry
 1 Exotic Orchard
 1 Isolated Chapel
@@ -101,5 +105,5 @@
 1 Unclaimed Territory
 1 Voldaren Estate
 1 Vault of the Archangel
-13 Swamp
-8 Plains
+11 Swamp
+6 Plains

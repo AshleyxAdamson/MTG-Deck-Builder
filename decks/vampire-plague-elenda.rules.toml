@@ -2,7 +2,7 @@
 # on top of the casual baseline from the commander-deck skill's rules-template.toml.
 
 commander = "Elenda, the Dusk Rose"
-budget = 150
+budget = 185                    # the brief says ~$150; raised on 2026-10-12 to pay for four dual lands
 max_game_changers = 0
 max_infinite_combos = 0
 not_together = [["Sanguine Bond", "Exquisite Blood"]]
