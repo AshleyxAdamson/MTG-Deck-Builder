@@ -1,0 +1,34 @@
+# Rules for The Walking Forest: the brief's own constraints (decks/briefs/treefolk-quickbeam.md)
+# on top of the casual baseline from the commander-deck skill's rules-template.toml.
+
+commander = "Quickbeam, Upstart Ent"
+budget = 150                    # the brief's cap; the deck is meant to land well under it
+max_game_changers = 0
+max_infinite_combos = 0
+# Departure from template: the brief's "Left out on purpose as too complex" cards, so a later
+# edit cannot slip one back in. Quickbeam himself is the commander, not a ban.
+banned = [
+  "Six",
+  "Yedora, Grave Gardener",
+  "Kurbis, Harvest Celebrant",
+  "Ferrafor, Young Yew",
+  "Harold and Bob, First Numens",
+]
+
+[limits]
+board-wipe = 1                  # the brief: one at most (the deck runs none)
+mass-land-denial = 0
+extra-turn = 0
+tapland = 0                     # departure (template 8): the brief wants a nearly all-Forest mana base with no tapped lands
+tax = 1                         # departure: the brief bans stax and tax effects; the broad `tax` tag flags Warden of the Woods (a false positive, it only draws when targeted), so exactly one is allowed
+tax-attack = 0                  # departure: the brief bans stax and tax effects (the broad `tax` tag flags Warden of the Woods, which only draws when targeted, so the narrow tags are used)
+cast-tax = 0                    # departure: same reason
+lockdown = 0                    # departure: the brief bans stax effects
+
+[minimums]
+lands = 37                      # departure (template 36): the template's 37 to 38 target, because the commander costs 6 and the average mana value is about 3.6
+ramp = 15                       # departure (template 10): baseline says 12 for a 4+ cost commander and up to 15 for big mana; tag counts run 1 to 3 high, so 15 tagged is about 13 real
+card-advantage = 12             # template value; about 10 real, and the brief wants draw that rewards big creatures
+spot-removal = 6
+protection = 2
+hate-graveyard = 1
