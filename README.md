@@ -1,5 +1,36 @@
 # MTG Deck Builder
 
+Local card search, deck checks and an MCP server for building Magic: The Gathering Commander decks with an agent.
+
+## Setting up on a new machine
+
+1. Install [uv](https://docs.astral.sh/uv/) (`brew install uv` on a Mac) and the Claude Code CLI.
+2. Clone this repo, and from its root download the data and build the indexes. This fetches about 145 MB into `data/`:
+
+   ```bash
+   uv run mtg update
+   ```
+
+3. Register the MCP server with Claude Code, for every project on the machine:
+
+   ```bash
+   claude mcp add --scope user mtg-cards -- uv run --directory "$PWD" mtg-mcp
+   ```
+
+4. Get the `commander-deck` skill, which lives in the [dev-tools](https://github.com/AshleyxAdamson/dev-tools) repo. Clone or update `~/dev-tools`, then run its health check, which links every skill into `~/.claude/skills/`:
+
+   ```bash
+   ~/dev-tools/bin/check-dev-tools-health.sh
+   ```
+
+5. Start a new Claude Code session in this folder and ask for a deck:
+
+   ```text
+   Use the commander-deck skill to build the deck in decks/briefs/sphinx-oracle.md.
+   ```
+
+The rest of this file explains each part.
+
 ## Data
 
 Card and rules data is downloaded on demand, not committed. Fetch it with:
