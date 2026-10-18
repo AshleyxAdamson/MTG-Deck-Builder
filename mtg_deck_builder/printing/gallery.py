@@ -1,8 +1,10 @@
 """The art gallery: one self-contained HTML page and a small server that saves taps.
 
-The page is a template string with inline CSS and JS (no framework, no external assets).
-This module does not know the print-file format: the caller hands it plain dicts and
-receives `on_choose(name, source, id)` calls. See docs/spec/print-suite.md, "Step 2".
+The page is a template string with inline CSS and JS (no framework, no external assets,
+no build step). Each card is a swipeable carousel of full-size candidate images with a
+"Use this art" button under each slide. This module does not know the print-file format:
+the caller hands it plain dicts and receives `on_choose(name, source, id)` calls.
+See docs/spec/print-suite.md, "Step 2: the gallery".
 """
 from __future__ import annotations
 
@@ -47,19 +49,34 @@ def _dpi(cand: dict) -> str:
     return f"{cand['dpi']} dpi" if cand.get("dpi") else "? dpi"
 
 
-def _caption(cand: dict) -> str:
+def _same(a: dict, b: dict) -> bool:
+    return bool(a) and bool(b) and a.get("id") == b.get("id") and a.get("source") == b.get("source")
+
+
+def _chip(cls: str, text: str) -> str:
+    return f'<span class="chip {cls}">{text}</span>'
+
+
+def _slide(j: int, cand: dict, chosen: dict) -> str:
+    on = _same(cand, chosen)
+    thumb, large = _url(cand.get("thumb")), _url(cand.get("large") or cand.get("thumb"))
+    ph = f'<img class="ph" alt="" loading="lazy" decoding="async" src="{thumb}">' if thumb else ""
+    big = f'<img class="large" alt="" loading="lazy" decoding="async" src="{large}">' if large else ""
+    label = cand.get("label") or cand.get("id")
     second = " · ".join(x for x in (cand.get("artist"), _dpi(cand)) if x)
-    return f'<span class="l">{_esc(cand.get("label") or cand.get("id"))}</span><span class="a">{_esc(second)}</span>'
-
-
-def _thumb(i: int, j: int, cand: dict, chosen: dict) -> str:
+    chips = _chip(_style(cand), _style(cand).upper())
+    if cand.get("fancy"):
+        chips += _chip("fancy", "FANCY")
+    if cand.get("universes_beyond"):
+        chips += _chip("ub", "UB")
     q = f'{cand.get("label", "")} {cand.get("artist") or ""}'.lower()
-    on = " on" if chosen and cand.get("id") == chosen.get("id") and cand.get("source") == chosen.get("source") else ""
-    img = f'<img loading="lazy" decoding="async" alt="" src="{_url(cand.get("thumb"))}">' if _url(cand.get("thumb")) else '<i class="noimg"></i>'
     return (
-        f'<button type="button" class="th{on}" data-j="{j}" data-style="{_style(cand)}" '
-        f'data-fancy="{int(bool(cand.get("fancy")))}" data-ub="{int(bool(cand.get("universes_beyond")))}" '
-        f'data-q="{_esc(q)}">{img}<span class="cap">{_caption(cand)}</span></button>'
+        f'<figure class="slide{" on" if on else ""}" data-j="{j}" data-style="{_style(cand)}" '
+        f'data-fancy="{int(bool(cand.get("fancy")))}" data-ub="{int(bool(cand.get("universes_beyond")))}" data-q="{_esc(q)}">'
+        f'<div class="img" role="img" aria-label="{_esc(label)}">{ph}{big}</div>'
+        f'<figcaption><span class="l">{_esc(label)}</span><span class="a">{_esc(second)}</span>'
+        f'<span class="chips">{chips}</span></figcaption>'
+        f'<button type="button" class="use"{" disabled" if on else ""}>{"Chosen" if on else "Use this art"}</button></figure>'
     )
 
 
@@ -68,24 +85,17 @@ def _badge(cls: str, text: str, hidden: bool = False) -> str:
 
 
 def _badges(card: dict, ch: dict) -> str:
-    out = [
-        _badge("render", "RENDER", not ch or _style(ch) != "render"),
-        _badge("scan", "SCAN", not ch or _style(ch) != "scan"),
-        _badge("fancy", "FANCY", not ch.get("fancy")),
-        _badge("low", "LOW RES", not (ch and ch.get("dpi") is not None and ch["dpi"] < LOW_DPI)),
-        _badge("ub", "UNIVERSES BEYOND", not ch.get("universes_beyond")),
-    ]
+    out = []
+    if (card.get("copies") or 1) > 1:
+        out.append(_badge("copies", f'x{_esc(card["copies"])}'))
+    if card.get("kind") == "token":
+        out.append(_badge("token", "TOKEN"))
+    if card.get("status") == "missing":
+        out.append(_badge("missing", "MISSING"))
+    out.append(_badge("low", "LOW RES", not (ch and ch.get("dpi") is not None and ch["dpi"] < LOW_DPI)))
     if card.get("will_upscale") or card.get("upscaled_from"):
         src = f' from {_esc(card["upscaled_from"])} dpi' if card.get("upscaled_from") else ""
         out.append(_badge("up", "UPSCALE" + src))
-    if card.get("printed"):
-        out.append(_badge("printed", "PRINTED"))
-    if card.get("status") == "missing":
-        out.append(_badge("missing", "MISSING"))
-    if card.get("kind") == "token":
-        out.append(_badge("token", "TOKEN"))
-    if (card.get("copies") or 1) > 1:
-        out.append(_badge("copies", f'x{_esc(card["copies"])}'))
     return "".join(out)
 
 
@@ -103,36 +113,31 @@ def _controls(card: dict) -> str:
         parts.append('<div class="ctl"><span>Compare</span><div class="seg" data-ctl="compare">'
                      '<button type="button" data-which="before">before</button>'
                      '<button type="button" data-which="after" class="on">after</button></div></div>')
-    slots = card.get("slots")
-    if slots:
-        n = max(1, min(4, len(slots)))
-        parts.append('<div class="ctl"><span>Spread over <b class="n">%d</b> arts</span>'
+    if card.get("slots"):
+        parts.append('<div class="ctl"><span>Spread over <b class="n"></b> arts</span>'
                      '<div class="seg" data-ctl="slots"><button type="button" data-d="-1" aria-label="fewer">−</button>'
                      '<button type="button" data-d="1" aria-label="more">+</button></div>'
-                     '<small class="split"></small></div>' % n)
+                     '<small class="split"></small></div>')
     return f'<div class="ctls">{"".join(parts)}</div>' if parts else ""
 
 
 def _row(i: int, card: dict) -> str:
     ch = card.get("chosen") or {}
-    cands = card.get("candidates") or []
-    missing = card.get("status") == "missing"
-    cls = "row" + (" printed" if card.get("printed") else "") + (" missing" if missing else "")
-    large, thumb = _url(ch.get("large") or ch.get("thumb")), _url(ch.get("thumb"))
-    if large or thumb:
-        ph = f'<img class="ph" alt="" src="{thumb}">' if thumb else ""
-        big = f'<div class="big" role="img" aria-label="{_esc(card.get("name"))}">{ph}<img class="large" alt="" src="{large or thumb}" loading="lazy" decoding="async"></div>'
+    cands = list(enumerate(card.get("candidates") or []))
+    # The chosen candidate first, then the rest in ranking order.
+    cands.sort(key=lambda jc: not _same(jc[1], ch))
+    if cands:
+        track = "".join(_slide(j, c, ch) for j, c in cands)
+        car = (f'<div class="carwrap"><button type="button" class="arr prev" aria-label="Previous art">‹</button>'
+               f'<div class="car" tabindex="0">{track}</div>'
+               f'<button type="button" class="arr next" aria-label="Next art">›</button></div>'
+               f'<div class="pos" aria-live="polite"></div>')
     else:
-        big = '<div class="big empty"><span>No printable image</span></div>'
-    lock = '<span class="lock" title="Already printed">🔒</span>' if card.get("printed") else ""
-    sub = " · ".join(x for x in (ch.get("artist"), _dpi(ch) if ch else None) if x)
-    strip = "".join(_thumb(i, j, c, ch) for j, c in enumerate(cands))
+        car = '<div class="none-img">No printable image</div>'
     return (
-        f'<section class="{cls}" data-i="{i}" data-name="{_esc(str(card.get("name")).lower())}">'
-        f'<div class="main">{big}<div class="meta"><h3>{lock}{_esc(card.get("name"))}</h3>'
-        f'<div class="label">{_esc(ch.get("label"))}</div><div class="sub">{_esc(sub)}</div>'
-        f'<div class="badges">{_badges(card, ch)}</div></div></div>'
-        f'<div class="side"><div class="strip">{strip}</div>{_controls(card)}</div></section>'
+        f'<section class="row{" missing" if card.get("status") == "missing" else ""}" data-i="{i}">'
+        f'<div class="hd"><h3>{_esc(card.get("name"))}</h3><div class="badges">{_badges(card, ch)}</div></div>'
+        f'{car}{_controls(card)}</section>'
     )
 
 
@@ -184,7 +189,6 @@ PAGE = """<!doctype html>
 <button type="button" data-style="all" class="on">all</button><button type="button" data-style="render">renders</button>
 <button type="button" data-style="scan">scans</button><button type="button" data-style="fancy">fancy only</button></div>
 <label class="chk"><input type="checkbox" id="noub"> hide Universes Beyond</label>
-<label class="chk"><input type="checkbox" id="showprinted"> show printed</label>
 <input type="search" id="q" placeholder="Filter by artist or name" autocomplete="off"></div>
 <main>@@BODY@@<p id="none" hidden>Nothing matches these filters.</p></main>
 <div id="toast" role="status" hidden></div>
@@ -193,40 +197,49 @@ PAGE = """<!doctype html>
 """
 
 CSS = """
-:root{--bg:#0f1115;--panel:#181b22;--panel2:#20242d;--line:#2d323d;--fg:#e8eaf0;--dim:#9aa1b0;--acc:#6ea8fe;--ok:#4cc38a;--bad:#ef5b5b;--warn:#e5a93c}
+:root{--bg:#0f1115;--panel:#181b22;--panel2:#20242d;--line:#2d323d;--fg:#e8eaf0;--dim:#9aa1b0;--acc:#6ea8fe;--ok:#4cc38a;--bad:#ef5b5b;--warn:#e5a93c;--gap:12px}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.35 system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
-button,input{font:inherit;color:inherit}button{cursor:pointer;min-height:44px}
-header{padding:14px 14px 4px}h1{margin:0 0 6px;font-size:20px;overflow-wrap:anywhere}
+button,input{font:inherit;color:inherit}button{cursor:pointer;min-height:44px}button:disabled{cursor:default}
+header,.filters,main{padding-left:16px;padding-right:16px;max-width:1100px;margin:0 auto}
+header{padding-top:14px;padding-bottom:4px}h1{margin:0 0 6px;font-size:20px;overflow-wrap:anywhere}
 .stats{display:flex;flex-wrap:wrap;gap:6px 14px;list-style:none;margin:0;padding:0;color:var(--dim)}.stats b{color:var(--fg)}
-.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 14px;background:#12151bf2;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
+.bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 16px;background:#12151bf2;border-bottom:1px solid var(--line);backdrop-filter:blur(6px)}
 #count{font-weight:600}#count.some{color:var(--acc)}
-#copy,.chips button,.seg button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:0 14px}
-.filters{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:10px 14px}
-.chips{display:flex;flex-wrap:wrap;gap:6px}.chips button.on,.seg button.on{background:var(--acc);border-color:var(--acc);color:#0b1020;font-weight:600}
+#copy,.chips>button,.seg button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:0 14px}
+.filters{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding-top:10px;padding-bottom:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips>button.on,.seg button.on{background:var(--acc);border-color:var(--acc);color:#0b1020;font-weight:600}
 .chk{display:flex;align-items:center;gap:6px;min-height:44px}.chk input{width:22px;height:22px}
 #q{flex:1 1 180px;min-width:0;min-height:44px;padding:0 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px}
-main{padding:0 14px 60px}.grp{margin:22px 0 8px;font-size:16px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:4px}.grp small{color:var(--dim)}
-.row{display:grid;grid-template-columns:minmax(240px,330px) minmax(0,1fr);gap:14px;padding:12px;margin:0 0 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
-.row.printed .main,.row.printed .strip{opacity:.7}.row.missing{border-color:var(--bad)}
-.main,.side{min-width:0}.big{position:relative;aspect-ratio:5/7;border-radius:4.5%;overflow:hidden;background:var(--panel2)}
-.big img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.big img.ph{filter:blur(2px)}
-.big.empty{display:flex;align-items:center;justify-content:center;color:var(--dim);border:1px dashed var(--bad)}
-.meta h3{margin:10px 0 2px;font-size:17px;overflow-wrap:anywhere}.label{overflow-wrap:anywhere}.sub{color:var(--dim)}.lock{margin-right:6px}
-.badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+main{padding-bottom:60px}.grp{margin:22px 0 8px;font-size:16px;color:var(--acc);border-bottom:1px solid var(--line);padding-bottom:4px}.grp small{color:var(--dim)}
+.row{min-width:0;padding:12px 0 14px;margin:0 0 10px;border-bottom:1px solid var(--line)}.row[hidden]{display:none}
+.hd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-bottom:8px}.hd h3{margin:0;font-size:18px;overflow-wrap:anywhere}
+.badges{display:flex;flex-wrap:wrap;gap:4px}
 .b{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:99px;background:var(--panel2);border:1px solid var(--line)}.b[hidden]{display:none}
-.b.render{color:var(--ok)}.b.scan{color:var(--warn)}.b.fancy{color:#c79bff}.b.low,.b.missing{color:var(--bad);border-color:var(--bad)}
-.b.up{color:var(--acc)}.b.printed{color:var(--dim)}.b.copies{color:var(--fg)}
-.strip{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
-.th{flex:0 0 118px;display:flex;flex-direction:column;gap:4px;padding:4px;text-align:left;background:var(--panel2);border:2px solid transparent;border-radius:8px;scroll-snap-align:start}
-.th.on{border-color:var(--acc)}.th[hidden]{display:none}.th img,.noimg{display:block;width:100%;aspect-ratio:5/7;object-fit:cover;border-radius:4px;background:#000}
-.cap{display:flex;flex-direction:column;font-size:11px;line-height:1.25}.cap span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
-.cap .a{color:var(--dim)}.th.busy{opacity:.5}
-.ctls{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:6px}.ctl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}
+.b.low,.b.missing{color:var(--bad);border-color:var(--bad)}.b.up{color:var(--acc)}.b.token{color:var(--warn)}
+.carwrap{display:grid;grid-template-columns:minmax(0,1fr);align-items:center}
+.car{display:flex;gap:var(--gap);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;position:relative;scrollbar-width:none;min-width:0}
+.car::-webkit-scrollbar{display:none}.car:focus-visible{outline:2px solid var(--acc)}
+.slide{flex:0 0 min(100%,420px);margin:0;scroll-snap-align:center;scroll-snap-stop:always;display:flex;flex-direction:column;gap:6px;padding:6px;background:var(--panel);border:2px solid transparent;border-radius:12px}
+.slide.on{border-color:var(--acc)}.slide[hidden]{display:none}
+.img{position:relative;aspect-ratio:63/88;width:100%;border-radius:4.5%;overflow:hidden;background:var(--panel2)}
+.img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.img img.ph{filter:blur(2px)}
+figcaption{display:flex;flex-direction:column;gap:2px;min-height:4.6em}.l{overflow-wrap:anywhere;font-weight:600}.a{color:var(--dim);font-size:13px}
+.chips .chip{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:var(--panel2);border:1px solid var(--line)}
+.chip.render{color:var(--ok)}.chip.scan{color:var(--warn)}.chip.fancy{color:#c79bff}.chip.ub{color:var(--acc)}
+.slide .chips{display:flex;gap:4px;margin-top:2px}
+.use{width:100%;min-height:44px;border:1px solid var(--acc);border-radius:8px;background:var(--acc);color:#0b1020;font-weight:700}
+.use:disabled{background:var(--panel2);border-color:var(--line);color:var(--dim)}.slide.busy{opacity:.55}
+.arr{display:none;width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);font-size:24px;line-height:1;padding:0}
+.pos{text-align:center;color:var(--dim);font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums}
+.none-img{padding:28px 12px;text-align:center;color:var(--dim);border:1px dashed var(--bad);border-radius:12px}
+.ctls{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:8px}.ctl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}.ctl[hidden]{display:none}
 .seg{display:inline-flex;gap:4px}.seg button{min-width:44px}.ctl small{color:var(--dim)}
-#toast{position:fixed;left:12px;right:12px;bottom:14px;z-index:9;padding:12px 14px;background:#2b1d1d;border:1px solid var(--bad);border-radius:10px}
+#toast{position:fixed;left:16px;right:16px;bottom:14px;z-index:9;padding:12px 14px;background:#2b1d1d;border:1px solid var(--bad);border-radius:10px}
 #toast.good{background:#16261e;border-color:var(--ok)}
-@media (max-width:700px){.row{grid-template-columns:minmax(0,1fr)}.big{width:100%}}
+@media (min-width:700px){
+.carwrap{grid-template-columns:44px minmax(0,1fr) 44px;gap:8px}.arr{display:block}.arr[disabled]{opacity:.3}
+.slide{flex-basis:min(100%,300px)}}
 """
 
 JS = r"""
@@ -234,7 +247,7 @@ JS = r"""
 'use strict';
 var D=JSON.parse(document.getElementById('data').textContent), cards=D.cards;
 var T=new URLSearchParams(location.search).get('t')||'';
-var KEY='gallery:'+(D.deck.name||''), changed={}, f={style:'all',noub:false,printed:false,q:''};
+var KEY='gallery:'+(D.deck.name||''), changed={}, f={style:'all',noub:false,q:''};
 function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 function store(k,v){try{if(v===undefined)return localStorage.getItem(KEY+k);localStorage.setItem(KEY+k,v)}catch(e){}return null}
@@ -246,37 +259,40 @@ function post(path,body){
 }
 function gone(){toast('The server is not reachable. Your choice is kept on this page: use Copy choices and paste it to the agent.')}
 function fail(res){if(res.gone)gone();else toast('Not saved: '+(res.error||'unknown error'))}
-function tomlStr(s){return JSON.stringify(String(s))}
 function updateBar(){var n=Object.keys(changed).length,c=$('#count');c.textContent=n+' changed';c.className=n?'some':''}
 function row(i){return $('.row[data-i="'+i+'"]')}
-function chosenOf(c){return c.chosen||{}}
-function same(a,b){return a&&b&&a.id===b.id&&a.source===b.source}
+function same(a,b){return !!a&&!!b&&a.id===b.id&&a.source===b.source}
+
+/* position indicator and arrows */
+function pos(r){
+  var car=$('.car',r);if(!car)return;
+  var vis=$$('.slide',car).filter(function(s){return !s.hidden}),mid=car.scrollLeft+car.clientWidth/2,best=0,d=1e9;
+  vis.forEach(function(s,k){var x=Math.abs(s.offsetLeft+s.offsetWidth/2-mid);if(x<d){d=x;best=k}});
+  $('.pos',r).textContent=vis.length?(best+1)+' / '+vis.length:'';
+  var p=$('.prev',r),n=$('.next',r);
+  if(p){p.disabled=car.scrollLeft<4;n.disabled=car.scrollLeft+car.clientWidth>=car.scrollWidth-4}
+}
+function slideStep(car){var s=$('.slide:not([hidden])',car);return s?s.offsetWidth+12:car.clientWidth}
 
 function paint(i){
-  var c=cards[i],ch=chosenOf(c),r=row(i);
-  var big=$('.big',r);
-  if(big.classList.contains('empty')){big.classList.remove('empty');big.innerHTML='<img class="ph" alt=""><img class="large" alt="">';big.setAttribute('role','img');big.setAttribute('aria-label',c.name)}
-  var ph=$('.ph',big),lg=$('.large',big);
-  if(ph&&ch.thumb)ph.src=ch.thumb;
-  lg.src=ch.large||ch.thumb||'';
-  $('.label',r).textContent=ch.label||'';
-  $('.sub',r).textContent=[ch.artist,ch.dpi?ch.dpi+' dpi':'? dpi'].filter(Boolean).join(' · ');
-  var show={render:ch.source==='mpcfill',scan:ch.source!=='mpcfill',fancy:!!ch.fancy,low:ch.dpi!=null&&ch.dpi<600,ub:!!ch.universes_beyond};
-  Object.keys(show).forEach(function(k){var b=$('.b.'+k,r);if(b)b.hidden=!show[k]});
-  $$('.th',r).forEach(function(t){t.classList.toggle('on',same(c.candidates[+t.dataset.j],ch))});
+  var c=cards[i],ch=c.chosen||{},r=row(i);
+  $$('.slide',r).forEach(function(s){
+    var on=same(c.candidates[+s.dataset.j],ch),b=$('.use',s);
+    s.classList.toggle('on',on);b.disabled=on;b.textContent=on?'Chosen':'Use this art';
+  });
+  var low=$('.b.low',r);if(low)low.hidden=!(ch.dpi!=null&&ch.dpi<600);
   var cmp=$('[data-ctl=compare]',r);
   if(cmp){cmp.parentNode.hidden=!same(ch,c.original||ch);$$('button',cmp).forEach(function(x){x.classList.toggle('on',x.dataset.which==='after')})}
 }
 
-function choose(i,j,btn){
-  var c=cards[i],cand=c.candidates[j];
-  if(same(cand,chosenOf(c)))return;
-  if(c.printed&&!confirm('This card is already printed. Reprint it with this art?'))return;
-  btn.classList.add('busy');
+function choose(i,s){
+  var c=cards[i],cand=c.candidates[+s.dataset.j];
+  if(same(cand,c.chosen))return;
+  s.classList.add('busy');
   post('/choose',{name:c.name,source:cand.source,id:cand.id}).then(function(res){
-    btn.classList.remove('busy');
+    s.classList.remove('busy');
     if(!res.ok&&!res.gone){fail(res);return}
-    if(c.original===undefined)c.original=chosenOf(c);
+    if(c.original===undefined)c.original=c.chosen||{};
     c.chosen=cand;paint(i);
     if(same(c.original,cand))delete changed[c.name];else changed[c.name]={source:cand.source,id:cand.id};
     updateBar();
@@ -300,8 +316,14 @@ function showSlots(i){
 
 function bind(){
   $$('.row').forEach(function(r){
-    var i=+r.dataset.i,c=cards[i];
-    $$('.th',r).forEach(function(t){t.addEventListener('click',function(){choose(i,+t.dataset.j,t)})});
+    var i=+r.dataset.i,c=cards[i],car=$('.car',r);
+    if(car){
+      $$('.use',car).forEach(function(b){b.addEventListener('click',function(){choose(i,b.closest('.slide'))})});
+      var tick=false;
+      car.addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(function(){tick=false;pos(r)})}},{passive:true});
+      ['prev','next'].forEach(function(k,n){var b=$('.'+k,r);b.addEventListener('click',function(){
+        car.scrollBy({left:(n?1:-1)*slideStep(car),behavior:'smooth'})})});
+    }
     var up=$('[data-ctl=upscale]',r);
     if(up)$$('button',up).forEach(function(b){b.addEventListener('click',function(){
       post('/upscale',{name:c.name,mode:b.dataset.mode}).then(function(res){
@@ -310,8 +332,8 @@ function bind(){
       })})});
     var cp=$('[data-ctl=compare]',r);
     if(cp)$$('button',cp).forEach(function(b){b.addEventListener('click',function(){
-      var u=c.compare[b.dataset.which];if(!u)return;
-      $('.large',r).src=u;$$('button',cp).forEach(function(x){x.classList.toggle('on',x===b)});
+      var u=c.compare[b.dataset.which],img=$('.slide.on .large',r);if(!u||!img)return;
+      img.src=u;$$('button',cp).forEach(function(x){x.classList.toggle('on',x===b)});
     })});
     var sl=$('[data-ctl=slots]',r);
     if(sl){showSlots(i);$$('button',sl).forEach(function(b){b.addEventListener('click',function(){
@@ -325,18 +347,17 @@ function bind(){
 }
 
 function apply(){
-  var any=false;
+  var any=false,q=f.q;
   $$('.row').forEach(function(r){
-    var c=cards[+r.dataset.i],q=f.q,hit=!q||c.name.toLowerCase().indexOf(q)>=0;
-    $$('.th',r).forEach(function(t){
-      var ok=true,on=t.classList.contains('on');
-      if(f.style==='fancy')ok=t.dataset.fancy==='1';else if(f.style!=='all')ok=t.dataset.style===f.style;
-      if(f.noub&&t.dataset.ub==='1')ok=false;
-      var m=!q||t.dataset.q.indexOf(q)>=0;if(m&&q)hit=true;
-      t.hidden=!(on||ok);
+    var c=cards[+r.dataset.i],nameHit=!q||String(c.name).toLowerCase().indexOf(q)>=0,hit=nameHit;
+    $$('.slide',r).forEach(function(s){
+      var ok=true,on=s.classList.contains('on');
+      if(f.style==='fancy')ok=s.dataset.fancy==='1';else if(f.style!=='all')ok=s.dataset.style===f.style;
+      if(f.noub&&s.dataset.ub==='1')ok=false;
+      var m=nameHit||s.dataset.q.indexOf(q)>=0;if(m&&ok)hit=true;
+      s.hidden=!(on||(ok&&m));
     });
-    var vis=hit&&(f.printed||!c.printed);
-    r.hidden=!vis;if(vis)any=true;
+    r.hidden=!hit;if(hit){any=true;pos(r)}
   });
   $$('.grp').forEach(function(h){var n=h.nextElementSibling,v=false;while(n&&n.classList.contains('row')){if(!n.hidden)v=true;n=n.nextElementSibling}h.hidden=!v});
   $('#none').hidden=any;
@@ -345,19 +366,18 @@ function apply(){
 
 function filters(){
   try{var s=JSON.parse(store('filters')||'null');if(s)f=Object.assign(f,s)}catch(e){}
-  $$('.chips button').forEach(function(b){
+  $$('.chips>button').forEach(function(b){
     b.classList.toggle('on',b.dataset.style===f.style);
-    b.addEventListener('click',function(){f.style=b.dataset.style;$$('.chips button').forEach(function(x){x.classList.toggle('on',x===b)});apply()});
+    b.addEventListener('click',function(){f.style=b.dataset.style;$$('.chips>button').forEach(function(x){x.classList.toggle('on',x===b)});apply()});
   });
-  $('#noub').checked=f.noub;$('#showprinted').checked=f.printed;$('#q').value=f.q;
+  $('#noub').checked=f.noub;$('#q').value=f.q;
   $('#noub').addEventListener('change',function(){f.noub=this.checked;apply()});
-  $('#showprinted').addEventListener('change',function(){f.printed=this.checked;apply()});
   $('#q').addEventListener('input',function(){f.q=this.value.trim().toLowerCase();apply()});
 }
 
 function fragment(){
   return Object.keys(changed).map(function(n){var x=changed[n];
-    return '[[choices]]\nname = '+tomlStr(n)+'\nsource = '+tomlStr(x.source)+'\nid = '+tomlStr(x.id)+'\n'}).join('\n');
+    return '[[choices]]\nname = '+JSON.stringify(n)+'\nsource = '+JSON.stringify(x.source)+'\nid = '+JSON.stringify(x.id)+'\n'}).join('\n');
 }
 function copy(){
   var txt=fragment();
@@ -370,6 +390,7 @@ function copy(){
 
 $('#copy').addEventListener('click',copy);
 filters();bind();apply();updateBar();
+window.addEventListener('resize',function(){$$('.row').forEach(pos)});
 try{var y=+store('scroll');if(y)window.scrollTo(0,y)}catch(e){}
 var st;window.addEventListener('scroll',function(){clearTimeout(st);st=setTimeout(function(){store('scroll',String(window.scrollY))},200)},{passive:true});
 })();
