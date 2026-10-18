@@ -22,6 +22,8 @@ DEFAULTS = {
     "cardback": {"kind": "plain", "color": "#000000"},
     "basics": "vary",
     "upscale": {"engine": "auto", "model": "ultrasharp-4x", "min_dpi": 600, "target_dpi": 800},
+    # Styles never chosen or shown. Lands keep textless, minimalist and full-art anyway (see printings.LAND_OK).
+    "styles": {"exclude": ["minimalist", "textless", "custom-frame", "altered", "ai-art", "non-black-border", "alt-name", "nsfw"]},
 }
 
 

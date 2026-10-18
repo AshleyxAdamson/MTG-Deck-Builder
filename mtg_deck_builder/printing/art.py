@@ -67,9 +67,11 @@ def candidates_for(db: sqlite3.Connection, name: str, row: sqlite3.Row | None, s
     if row is not None:
         found.extend(printings.scryfall_candidates(db, row["oracle_id"], allow_lowres=allow_lowres))
     pins = settings.get("pins", {}).get(name, {}) if isinstance(settings.get("pins"), dict) else {}
+    land = bool(row is not None and "Land" in (row["type_line"] or "").split(" // ")[0])
     return printings.rank(found, style, artist=pins.get("artist") or settings.get("artist"),
                           set_code=pins.get("set") or settings.get("set"),
-                          hide_ub=settings.get("hide_universes_beyond", False))
+                          hide_ub=settings.get("hide_universes_beyond", False),
+                          exclude_styles=set((settings.get("styles") or {}).get("exclude") or ()), land=land)
 
 
 def _entry_from(candidate: dict | None, name: str, copies: int, kind: str = "card") -> dict:
@@ -310,7 +312,8 @@ def gallery_payload(db: sqlite3.Connection, decklist: Path, pf: dict, order: dic
 
 
 def _public(c: dict) -> dict:
-    keys = ("source", "id", "label", "artist", "dpi", "fancy", "universes_beyond", "thumb", "large", "lowres", "render_source")
+    keys = ("source", "id", "label", "artist", "dpi", "fancy", "universes_beyond", "thumb", "large", "lowres",
+            "render_source", "styles", "standard")
     return {k: c.get(k) for k in keys if c.get(k) is not None}
 
 

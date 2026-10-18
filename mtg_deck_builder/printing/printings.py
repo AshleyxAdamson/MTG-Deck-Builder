@@ -33,6 +33,66 @@ WEIGHTS = {
 LOW_DPI = 600
 _last_scryfall_request = 0.0
 
+# Style keys. A render's mpcfill tags (canonical names and their ancestors) map through TAG_STYLES;
+# words in its name map through NAME_STYLES, because only about a fifth of renders are tagged.
+TAG_STYLES = {
+    "borderless": "borderless", "post-2023 borderless": "borderless", "extended-art": "extended",
+    "showcase": "showcase", "retro": "retro", "modern": "modern", "m15": "m15", "full text": "full-text",
+    "custom-made frame": "custom-frame", "minimalist": "minimalist", "futureshifted": "futureshifted",
+    "planeshifted": "planeshifted", "fnm promo": "promo", "foil-etched": "etched",
+    "universes beyond": "universes-beyond", "universe": "universes-beyond", "full-art": "full-art",
+    "custom art": "custom-art", "ai art": "ai-art", "ai remaster": "ai-art", "altered art": "altered",
+    "pixel art": "pixel", "pop-out art": "pop-out", "sketch art": "sketch", "upscaled scan": "upscaled-scan",
+    "textless": "textless", "secret lair": "secret-lair", "zeta": "textless", "non-black border": "non-black-border",
+    "alternate name": "alt-name", "nsfw": "nsfw", "eternal night card": "altered",
+}
+NAME_STYLES = {
+    "borderless": "borderless", "extended": "extended", "ext": "extended", "showcase": "showcase",
+    "min": "minimalist", "minimalist": "minimalist", "textless": "textless", "sketch": "sketch",
+    "trixified": "custom-frame", "blackout": "custom-frame", "full art": "full-art", "fullart": "full-art",
+    "retro": "retro", "ancient": "retro", "classic": "retro", "modern": "modern", "promo": "promo",
+    "pop-out": "pop-out", "popout": "pop-out", "pixel": "pixel", "ai": "ai-art", "storybook": "showcase",
+    "book": "showcase", "nsfw": "nsfw", "upscaled": "upscaled-scan", "secret lair": "secret-lair", "sld": "secret-lair",
+}
+# A render with any of these does not look like an ordinary Magic card: no cost or rules box.
+NON_STANDARD = {"minimalist", "textless", "custom-frame", "altered", "sketch", "pop-out", "pixel"}
+# What lands may be anyway: a land has no cost and its rules are simple.
+LAND_OK = {"textless", "minimalist", "full-art"}
+IMPLIED = {"minimalist": "custom-frame", "sketch": "altered", "pop-out": "altered", "pixel": "altered", "ai-art": "custom-art"}
+
+
+def styles_of(label: str, tags: list[str], aliases: dict | None = None) -> set[str]:
+    """Style keys for a render, from its tags and the words in its name."""
+    styles: set[str] = set()
+    aliases = aliases if aliases is not None else {}
+    for tag in tags or []:
+        canonical, ancestors = aliases.get(tag.lower(), (tag, []))
+        for name in [canonical, *ancestors]:
+            if name.lower() in TAG_STYLES:
+                styles.add(TAG_STYLES[name.lower()])
+    text = label.lower()
+    inside = " ".join(re.findall(r"\(([^()]*)\)|\[([^\[\]]*)\]", text) and
+                      [a or b for a, b in re.findall(r"\(([^()]*)\)|\[([^\[\]]*)\]", text)])
+    for phrase in ("full art", "secret lair", "pop-out"):
+        if phrase in text:
+            styles.add(NAME_STYLES[phrase])
+    for word in re.split(r"[\s,/_.-]+", inside):
+        if word in NAME_STYLES and word not in ("ai",):
+            styles.add(NAME_STYLES[word])
+    if re.search(r"\(\s*min\b|\bmin-\s", text):
+        styles.add("minimalist")
+    if re.search(r"\bai\b", inside):
+        styles.add("ai-art")
+    for key, implied in IMPLIED.items():
+        if key in styles:
+            styles.add(implied)
+    return styles
+
+
+def is_standard(styles: set[str], land: bool = False) -> bool:
+    bad = NON_STANDARD - (LAND_OK if land else set())
+    return not (styles & bad)
+
 
 def scryfall_candidates(db: sqlite3.Connection, oracle_id: str, allow_lowres: bool = False) -> list[dict]:
     """Printings worth printing: English paper cards with a real scan and a black or no border."""
@@ -61,7 +121,27 @@ def scryfall_candidates(db: sqlite3.Connection, oracle_id: str, allow_lowres: bo
         label = f"{p['set_code'].upper()} {p['collector_number']}, {p['artist'] or 'unknown artist'}"
         if flags:
             label += f" ({', '.join(flags)})"
+        styles = set()
+        if p["border_color"] == "borderless":
+            styles.add("borderless")
+        if p["full_art"] or "fullart" in effects:
+            styles.add("full-art")
+        if effects & FANCY_EFFECTS:
+            styles.add("showcase" if "showcase" in effects else "extended")
+        if p["textless"]:
+            styles.add("textless")
+        if p["frame"] in ("1993", "1997"):
+            styles.add("retro")
+        elif p["frame"] == "2003":
+            styles.add("modern")
+        elif p["frame"] == "2015":
+            styles.add("m15")
+        if "universesbeyond" in p["promo_types"]:
+            styles.add("universes-beyond")
+        if p["set_type"] == "promo" or any(t in p["promo_types"] for t in ("fnm", "promopack", "setpromo")):
+            styles.add("promo")
         found.append({
+            "styles": sorted(styles),
             "source": "scryfall",
             "id": p["scryfall_id"],
             "name": p["name"],
@@ -95,6 +175,10 @@ def mpcfill_candidates(names: list[str], source_names: list[str] | None, card_ty
     results = mpcfill.search(names, source_names, card_type=card_type)
     ids = [i for hits in results.values() for i in hits]
     meta = mpcfill.cards(ids) if ids else {}
+    try:
+        aliases = mpcfill.tag_aliases()
+    except CardDataError:
+        aliases = {}
     found: dict[str, list[dict]] = {}
     for name in names:
         key = mpcfill_key(name)
@@ -104,7 +188,10 @@ def mpcfill_candidates(names: list[str], source_names: list[str] | None, card_ty
             if not card:
                 continue
             fancy = mpcfill.is_fancy(card)
+            styles = styles_of(card["name"], card.get("tags") or [], aliases)
             found[name].append({
+                "styles": sorted(styles),
+                "universes_beyond_tag": "universes-beyond" in styles,
                 "source": "mpcfill",
                 "id": drive_id,
                 "name": name,
@@ -112,7 +199,7 @@ def mpcfill_candidates(names: list[str], source_names: list[str] | None, card_ty
                 "artist": _artist_from_label(card["name"]),
                 "dpi": int(card.get("dpi") or 0),
                 "fancy": fancy,
-                "universes_beyond": False,
+                "universes_beyond": "universes-beyond" in styles,
                 "plain": False,
                 "lowres": int(card.get("dpi") or 0) < LOW_DPI,
                 "thumb": mpcfill.thumbnail_url(drive_id, 400),
@@ -167,17 +254,24 @@ def score(candidate: dict, style: str) -> float:
 
 
 def rank(candidates: list[dict], style: str, *, artist: str | None = None, set_code: str | None = None,
-         hide_ub: bool = False) -> list[dict]:
-    """Best first. Pins (artist, set) go to the top; ties break on dpi, then newest."""
+         hide_ub: bool = False, exclude_styles: set[str] | None = None, land: bool = False) -> list[dict]:
+    """Best first. Pins (artist, set) go to the top; ties break on dpi, then newest.
+
+    Candidates carrying an excluded style are dropped; a land keeps the styles in LAND_OK.
+    """
+    excluded = set(exclude_styles or ()) - (LAND_OK if land else set())
+
     def key(c: dict):
         pinned = (artist and (c.get("artist") or "").lower() == artist.lower()) or \
                  (set_code and (c.get("set") or "").lower() == set_code.lower())
         return (not pinned, -score(c, style), -c.get("dpi", 0), c.get("released_at") or "")
-    kept = [c for c in candidates if not (hide_ub and c.get("universes_beyond"))]
+    kept = [c for c in candidates if not (hide_ub and c.get("universes_beyond"))
+            and not (set(c.get("styles") or ()) & excluded)]
     ordered = sorted(kept, key=key)
     for position, c in enumerate(ordered):
         c["score"] = score(c, style)
         c["rank"] = position
+        c["standard"] = is_standard(set(c.get("styles") or ()), land)
     return ordered
 
 

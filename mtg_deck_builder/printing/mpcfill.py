@@ -118,6 +118,29 @@ def _source_pks(source_names: list[str] | None) -> list[list]:
     return pks
 
 
+def tag_aliases() -> dict[str, tuple[str, list[str]]]:
+    """mpcfill's tag taxonomy as {alias or name, lowercased: (canonical name, [ancestors])}.
+
+    Tags on a render may use any alias; the ancestors let 'Minimalist' also count as
+    'Custom-Made Frame' and 'Frame'. Cached for 7 days.
+    """
+    tree = _read_cache(CACHE_DIR / "tags.json")
+    if tree is None:
+        tree = _request("/2/tags/")
+        _write_cache(CACHE_DIR / "tags.json", tree)
+    aliases: dict[str, tuple[str, list[str]]] = {}
+
+    def walk(nodes, ancestors):
+        for node in nodes:
+            name = node["name"]
+            for alias in [name, *node.get("aliases", [])]:
+                aliases.setdefault(alias.lower(), (name, ancestors))
+            walk(node.get("children", []), [*ancestors, name])
+
+    walk(tree.get("tags", []), [])
+    return aliases
+
+
 def _search_settings(source_names: list[str] | None) -> dict:
     return {
         "searchTypeSettings": {"fuzzySearch": False, "filterCardbacks": False},
