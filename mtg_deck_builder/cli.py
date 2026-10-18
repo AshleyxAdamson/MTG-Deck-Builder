@@ -10,6 +10,8 @@ from contextlib import closing
 from pathlib import Path
 
 from . import cards, combos, decks, edhrec
+from .printing import art, export, ledger, printfile, send
+from .printing import gallery as gallery_page
 
 FETCH_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "fetch_data.py"
 COMPARISON = re.compile(r"^\s*(<=|>=|=|<|>)?\s*(\d+(?:\.\d+)?)\s*$")
@@ -136,13 +138,143 @@ def load_deck(args: argparse.Namespace) -> tuple[list[tuple[int, str]], dict, li
     return decks.parse_decklist(text), rules, commanders, format_problems(text, commanders)
 
 
+def format_art(report: dict) -> str:
+    lines = [f"{report['path']}: {report['unique']} cards ({report['cards']} with copies), {report['tokens']} tokens"]
+    lines.append(f"  already printed: {report['printed']}   new: {report['new']} "
+                 f"({report['renders']} renders, {report['scans']} scans)")
+    if report.get("renders_online") is False:
+        lines.append(f"  WARNING  mpcfill was not reachable, so only Scryfall printings were used: {report.get('renders_error')}")
+    if report["will_upscale"]:
+        lines.append(f"  will upscale ({len(report['will_upscale'])}): {', '.join(report['will_upscale'])}")
+    if report["lowres"]:
+        lines.append(f"  LOW RES  only a low-resolution scan exists: {', '.join(report['lowres'])}")
+    if report["missing"]:
+        lines.append(f"  MISSING  no printable image yet: {', '.join(report['missing'])}")
+    return "\n".join(lines)
+
+
+def format_print(report: dict) -> str:
+    lines = []
+    lines.append(f"{report['decklist']}: {report['quantity']} cards to print"
+                 + (f", {report['bracket']}-card tier with {report['free_slots']} free slots" if report.get("bracket") else "")
+                 + (" (whole deck)" if report.get("full") else f" (compared with {report['printed_as']}'s prints)"))
+    if report["already"]:
+        lines.append(f"  already have: {sum(report['already'].values())} cards")
+    if report["to_pull"]:
+        pulled = ", ".join(f"{n} {name}" if n > 1 else name for name, n in sorted(report["to_pull"].items()))
+        lines.append(f"  take out of the deck: {pulled}")
+    for item in report.get("upscaled", []):
+        how = "resampled only (no upscaler)" if item.get("fallback") else (item.get("model") or "from cache")
+        lines.append(f"  upscaled  {item['name']}: {item['from_dpi']} -> {item['to_dpi']} dpi, {how}")
+    lines += [f"  PROBLEM  {problem}" for problem in report["problems"]]
+    if report.get("xml"):
+        lines.append(f"  XML: {report['xml']}" + ("" if report["ok"] else "  (incomplete, see problems)"))
+    return "\n".join(lines)
+
+
+def format_send(result: dict) -> str:
+    lines = [f"{result['shop']}: " + (result.get("url") or ", ".join(result.get("folders", [])))]
+    lines += [f"  {i}. {step}" for i, step in enumerate(result.get("steps", []), 1)]
+    return "\n".join(lines)
+
+
+def _reachable(address: str, port: int) -> bool:
+    import socket
+    try:
+        with socket.create_connection((address, port), timeout=3):
+            return True
+    except OSError:
+        return False
+
+
+def run_gallery(db, args: argparse.Namespace) -> dict:
+    """Write the gallery page and serve it; blocks until Ctrl-C unless --no-serve."""
+    decklist = Path(args.decklist)
+    pf = printfile.load(printfile.path_for(decklist))
+    order = export.plan(db, decklist, pf, full=args.full, allow_lowres=True)
+    deck_info, cards_out = art.gallery_payload(db, decklist, pf, order)
+    page = decklist.with_suffix(".gallery.html")
+    gallery_page.write(deck_info, cards_out, page)
+    result = {"page": str(page)}
+    if args.no_serve:
+        return result
+
+    def on_choose(name, source, ident, slots=None):
+        art.set_art(decklist, name, source, ident, slots=slots)
+
+    def on_upscale(name, mode):
+        art.set_art(decklist, name, None, None, upscale=mode)
+
+    def on_hide(name, ident, source_name=None):
+        art.hide_render(decklist, ident, source_name)
+
+    # A restart keeps the previous link alive: same port and token, read back from the URL file.
+    url_file = decklist.with_suffix(".gallery.url")
+    port, token = args.port, None
+    if url_file.exists() and not args.port:
+        previous = url_file.read_text(encoding="utf-8").strip()
+        found = re.search(r":(\d+)/\?t=([A-Za-z0-9_-]+)", previous)
+        if found:
+            port, token = int(found[1]), found[2]
+    try:
+        server = gallery_page.serve(page, on_choose, on_upscale, on_hide=on_hide, bind=args.bind, port=port, token=token)
+    except OSError:
+        server = gallery_page.serve(page, on_choose, on_upscale, on_hide=on_hide, bind=args.bind, port=0, token=token)
+    url_file.write_text(server.url + "\n", encoding="utf-8")
+    result.update({"url": server.url, "address": server.address})
+    print(f"Gallery: {server.url}\n(choices save to {printfile.path_for(decklist).name}; Ctrl-C to stop)", file=sys.stderr)
+    if server.address not in ("127.0.0.1", "localhost") and not _reachable(server.address, server.port):
+        local = f"http://127.0.0.1:{server.port}/?t={server.token}"
+        print(f"WARNING  {server.address} does not answer from this Mac. The macOS firewall is probably blocking "
+              f"python: allow it in System Settings > Network > Firewall (a prompt may be waiting on screen). "
+              f"On the Mac itself use {local}", file=sys.stderr)
+        result["warning"] = f"{server.address} not reachable; firewall? Local URL: {local}"
+    if args.open:
+        send.open_in_browser(server.url)
+    try:
+        while True:
+            import time
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        # The URL file stays, so the next start reuses the same port and token and old links keep working.
+        server.stop()
+    return result
+
+
 def run(args: argparse.Namespace) -> None:
     # The download has to finish before the index is opened.
     if args.command == "update":
         return update(args.force)
+    if args.command == "placed":
+        decklist = Path(args.decklist)
+        pf = printfile.load(printfile.path_for(decklist))
+        xml = Path(args.xml) if args.xml else _latest_order(decklist, pf.get("printed_as"))
+        print(ledger.record(decklist, xml, args.date, pf.get("printed_as")))
+        return
 
     with closing(cards.open_index()) as db:
-        if args.command == "search":
+        if args.command == "art":
+            pf, result = art.choose_art(
+                db, Path(args.decklist), style=args.style, basics=args.basics, sources=args.source or None,
+                renders=not args.no_renders, keep=args.keep, allow_lowres=args.allow_lowres,
+                printed_as=args.printed_as, with_tokens=not args.no_tokens, use_ledger=not args.no_ledger,
+                artist=args.artist, set_code=args.set)
+        elif args.command == "pick":
+            result = art.set_art(Path(args.decklist), args.name, args.source, args.id, upscale=args.upscale,
+                                 copies=args.copies, drop=args.drop)
+        elif args.command == "gallery":
+            result = run_gallery(db, args)
+        elif args.command == "print":
+            result = export.export(db, Path(args.decklist), full=args.full, allow_lowres=args.allow_lowres,
+                                   upload=not args.no_upload, stock=args.stock, foil=args.foil,
+                                   out=Path(args.out) if args.out else None)
+            if args.to and result.get("xml"):
+                xml_paths = [Path(result["xml"])]
+                result["send"] = (send.to_notmpc(xml_paths, open_browser=not args.no_open) if args.to == "notmpc"
+                                  else send.to_mpc(xml_paths, autofill_bin=args.autofill_bin))
+        elif args.command == "ship":
+            result = ship(db, args)
+        elif args.command == "search":
             mana_min, mana_max = bounds(args.cmc)
             power_min, power_max = bounds(args.pow)
             toughness_min, toughness_max = bounds(args.tou)
@@ -180,7 +312,24 @@ def run(args: argparse.Namespace) -> None:
             result = cards.get_rulings(db, args.name)
 
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=1))
+        print(json.dumps(result, ensure_ascii=False, indent=1, default=str))
+    elif args.command == "art":
+        print(format_art(result))
+    elif args.command == "pick":
+        if result.get("dropped"):
+            print(f"{result['name']}: left out of the order")
+        else:
+            print(f"{result['name']}: {result.get('source')} {result.get('id')} x{result.get('copies')} upscale={result.get('upscale')}")
+    elif args.command == "gallery":
+        print(result.get("url") or result["page"])
+    elif args.command == "print":
+        print(format_print(result))
+        if result.get("send"):
+            print(format_send(result["send"]))
+        if not result["ok"]:
+            sys.exit(1)
+    elif args.command == "ship":
+        print(result["text"])
     elif args.command == "search":
         if args.brief:
             print("\n".join(format_brief(card) for card in result["cards"]))
@@ -221,6 +370,63 @@ def run(args: argparse.Namespace) -> None:
             print(f"  {ruling['date']}  {ruling['text']}")
     if args.command == "check" and not result["valid"]:
         sys.exit(1)
+
+
+def _latest_order(decklist: Path, printed_as: str | None) -> Path:
+    """The newest printed/orders/<deck>-<n>.xml, which `mtg print` just wrote."""
+    following = ledger.next_order_path(decklist, printed_as)
+    number = int(following.stem.rsplit("-", 1)[1]) - 1
+    latest = following.with_name(f"{following.stem.rsplit('-', 1)[0]}-{number}.xml")
+    if number < 1 or not latest.exists():
+        raise cards.CardDataError(f"No order XML found for {decklist.name}; run mtg print first or pass --xml.")
+    return latest
+
+
+def ship(db, args: argparse.Namespace) -> dict:
+    """art, then the gallery (in tmux, so it outlives this command), or straight to the XML and the shop."""
+    decklists = [Path(d) for d in args.decklist]
+    printed_as = args.printed_as or []
+    lines, xml_paths, urls = [], [], []
+    for i, decklist in enumerate(decklists):
+        physical = printed_as[i] if i < len(printed_as) else None
+        pf, report = art.choose_art(db, decklist, style=args.style, printed_as=physical, keep=args.keep)
+        lines.append(format_art(report))
+        if not args.no_gallery:
+            url = start_gallery_in_tmux(decklist)
+            urls.append(url)
+            lines.append(f"  gallery: {url}")
+            continue
+        result = export.export(db, decklist, allow_lowres=args.allow_lowres)
+        lines.append(format_print(result))
+        if result.get("xml") and result["ok"]:
+            xml_paths.append(Path(result["xml"]))
+    if urls:
+        lines.append("\nSwap any art in the gallery, then run `mtg print <decklist> --to notmpc` (or ship --no-gallery) to make the order.")
+    elif xml_paths:
+        sent = send.to_notmpc(xml_paths) if args.to == "notmpc" else send.to_mpc(xml_paths)
+        lines.append(format_send(sent))
+    return {"text": "\n".join(lines), "gallery_urls": urls, "xml": [str(p) for p in xml_paths]}
+
+
+def start_gallery_in_tmux(decklist: Path) -> str:
+    """Serve the gallery from a tmux session named after the deck, and return its URL."""
+    import shutil
+    import time
+    session = f"mtg-gallery-{decklist.stem}"
+    url_file = decklist.with_suffix(".gallery.url")
+    # The file from a previous run is kept (its port and token are reused); wait for it to be rewritten.
+    before = url_file.stat().st_mtime_ns if url_file.exists() else None
+    command = f"cd {Path.cwd()} && uv run mtg gallery {decklist} 2> {decklist.with_suffix('.gallery.log')}"
+    if shutil.which("tmux"):
+        subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+        subprocess.run(["tmux", "new-session", "-d", "-s", session, command], check=True)
+    else:
+        subprocess.Popen(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(120):
+        if url_file.exists() and url_file.stat().st_mtime_ns != before:
+            return url_file.read_text(encoding="utf-8").strip()
+        time.sleep(0.5)
+    raise cards.CardDataError(f"The gallery did not start; run `uv run mtg gallery {decklist}` by hand to see why.")
 
 
 def main() -> None:
@@ -269,6 +475,64 @@ def main() -> None:
     check.add_argument("--rules", help="deck rules file (default: the decklist's name with .rules.toml)")
     refresh = commands.add_parser("update", help="download the latest data and refresh the index")
     refresh.add_argument("--force", action="store_true", help="download even if the local files are current")
+
+    art_cmd = commands.add_parser("art", help="choose a printing for every card and write <deck>.print.toml")
+    art_cmd.add_argument("decklist")
+    art_cmd.add_argument("--style", choices=printfile.STYLES, default="fullart")
+    art_cmd.add_argument("--basics", choices=("vary", "same"), help="spread basic lands over several arts (default) or one")
+    art_cmd.add_argument("--source", action="append", help="mpcfill source to use, in priority order (repeatable)")
+    art_cmd.add_argument("--no-renders", action="store_true", help="Scryfall printings only, no community renders")
+    art_cmd.add_argument("--keep", action="store_true", help="keep choices the user or the ledger made; fill gaps only")
+    art_cmd.add_argument("--allow-lowres", action="store_true", help="accept low-resolution scans when nothing better exists")
+    art_cmd.add_argument("--printed-as", help="the physical deck this list upgrades, for the ledger (e.g. treefolk-quickbeam)")
+    art_cmd.add_argument("--no-tokens", action="store_true", help="leave out the tokens the deck makes")
+    art_cmd.add_argument("--no-ledger", action="store_true", help="ignore what has been printed before")
+    art_cmd.add_argument("--artist", help="prefer this artist everywhere")
+    art_cmd.add_argument("--set", help="prefer this set code everywhere")
+
+    pick = commands.add_parser("pick", help="set one card's art by hand")
+    pick.add_argument("decklist")
+    pick.add_argument("name")
+    pick.add_argument("--source", choices=("mpcfill", "scryfall"))
+    pick.add_argument("--id", help="Drive id (mpcfill) or Scryfall id")
+    pick.add_argument("--upscale", choices=printfile.UPSCALE_MODES)
+    pick.add_argument("--copies", type=int, help="how many of a token to print")
+    pick.add_argument("--drop", action="store_true", help="leave a token out of the order")
+
+    gal = commands.add_parser("gallery", help="write the art gallery page and serve it (phone-friendly)")
+    gal.add_argument("decklist")
+    gal.add_argument("--bind", help="address to serve on (default: Tailscale, else LAN, else localhost)")
+    gal.add_argument("--port", type=int, default=0)
+    gal.add_argument("--no-serve", action="store_true", help="write the page only")
+    gal.add_argument("--open", action="store_true", help="open the page in the browser")
+    gal.add_argument("--full", action="store_true", help="show the whole deck as to-print, ignoring the ledger")
+
+    prt = commands.add_parser("print", help="write the order XML for what is not yet printed")
+    prt.add_argument("decklist")
+    prt.add_argument("--full", action="store_true", help="the whole deck, ignoring the ledger")
+    prt.add_argument("--allow-lowres", action="store_true")
+    prt.add_argument("--no-upload", action="store_true", help="prepare images but do not upload them to Drive")
+    prt.add_argument("--stock", choices=export.STOCKS)
+    prt.add_argument("--foil", action="store_true", default=None)
+    prt.add_argument("--out", help="write the XML here instead of the decks repo's printed/orders/")
+    prt.add_argument("--to", choices=("notmpc", "mpc"), help="also open the shop with instructions")
+    prt.add_argument("--no-open", action="store_true", help="do not open the browser")
+    prt.add_argument("--autofill-bin", help="path to the mpc-autofill desktop tool, for --to mpc")
+
+    placed = commands.add_parser("placed", help="record a placed order in the ledger")
+    placed.add_argument("decklist")
+    placed.add_argument("order", nargs="?", help="the shop's order number (noted in the commit message)")
+    placed.add_argument("--date", help="YYYY-MM-DD (default: blank, as the ledger's first rows)")
+    placed.add_argument("--xml", help="the order XML (default: the newest in printed/orders/ for this deck)")
+
+    shp = commands.add_parser("ship", help="art, gallery, XML and shop in one go, for one or more decks")
+    shp.add_argument("decklist", nargs="+")
+    shp.add_argument("--printed-as", action="append", help="physical deck per decklist, in order (repeatable)")
+    shp.add_argument("--style", choices=printfile.STYLES, default="fullart")
+    shp.add_argument("--keep", action="store_true")
+    shp.add_argument("--no-gallery", action="store_true", help="take the defaults and go straight to the order")
+    shp.add_argument("--allow-lowres", action="store_true")
+    shp.add_argument("--to", choices=("notmpc", "mpc"), default="notmpc")
 
     try:
         run(parser.parse_args())

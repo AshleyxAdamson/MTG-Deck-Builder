@@ -28,7 +28,7 @@ Every card fact comes from a tool call: text, cost, color identity, legality, pr
 
 7. **Feel pass.** The checker cannot judge how a deck plays. Read the list against the brief's table feel; for a casual table, against the *telegraphed* test in `baseline.md`: opponents can see the win a turn ahead and answer it. Done when each card that restricts opponents, steals, taxes or loops has been either cut or defended in the notes.
 
-8. **Hand over.** Write the decklist as bare `1 Card Name` lines, with no headers, comments or blank lines and the commander left out (it is `commander` in the rules file), so the file pastes into Moxfield as is. Outside the repo, hand the user that same bare list. Put the cards by role in the notes, with: how it plays, how each brief constraint is met, what was cut for budget and at what price, and each decision you made that the brief did not cover. These are the user's to overrule, so list them plainly.
+8. **Hand over.** Write the decklist as bare `1 Card Name` lines, with no headers, comments or blank lines and the commander left out (it is `commander` in the rules file), so the file pastes into Moxfield as is. Outside the repo, hand the user that same bare list. Put the cards by role in the notes, with: how it plays, how each brief constraint is met, what was cut for budget and at what price, and each decision you made that the brief did not cover. These are the user's to overrule, so list them plainly. When the user wants the deck printed, the `print-deck` skill takes it from here.
 
 ## Reviewing or tuning an existing list
 

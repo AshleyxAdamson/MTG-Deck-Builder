@@ -82,7 +82,7 @@ Searching needs [uv](https://docs.astral.sh/uv/), which installs Python 3.12 and
 
 ### For agents: MCP server
 
-`uv run mtg-mcp` serves six tools over stdio:
+`uv run mtg-mcp` serves these tools over stdio:
 
 | Tool | What it does |
 |---|---|
@@ -92,6 +92,7 @@ Searching needs [uv](https://docs.astral.sh/uv/), which installs Python 3.12 and
 | `find_tags` | Finds tags to search by, such as `board-wipe` or `sacrifice-outlet`. |
 | `commander_ideas` | What other players run with a commander, from EDHREC: top and high-synergy cards, themes, average deck shape, known combos. Needs the internet on first lookup. |
 | `validate_deck` | Checks a Commander list against the format (100 cards, singleton, color identity, legality, unknown names) and against the deck's own rules. Also reports the known combos in the deck and those one card away, card-type counts, tagged roles and total price. |
+| `choose_art`, `art_gallery`, `set_art`, `print_deck`, `record_order`, `printed_diff` | The printing flow (see "Printing a deck"): choose a printing per card, serve the gallery, set one card by hand, write the order XML for what is not yet printed, record a placed order, and ask what still needs printing. |
 
 Register it with Claude Code once, for every project on this machine:
 
@@ -184,6 +185,31 @@ Deck briefs live in `decks/briefs/`, and each deck is a decklist, a rules file a
 
 The evidence behind the skill's baseline and behind combo detection is in `docs/research/`.
 
+## Printing a deck
+
+From a checked decklist to a proxy order at [notmpc.com](https://notmpc.com), printing only the cards you do not have yet. The design is in `docs/spec/print-suite.md`; the `print-deck` skill (`.claude/skills/print-deck/`) walks an agent through it. In short:
+
+```bash
+uv run mtg art decks/treefolk-quickbeam-v2.txt --printed-as treefolk-quickbeam   # choose a printing per card
+uv run mtg gallery decks/treefolk-quickbeam-v2.txt                                # swap art from the phone or the Mac
+uv run mtg print decks/treefolk-quickbeam-v2.txt --to notmpc                      # the order XML, and the shop page
+uv run mtg placed decks/treefolk-quickbeam-v2.txt NMPC-12345 --date 2026-10-20    # record it so it is never reprinted
+uv run mtg ship decks/a.txt decks/b.txt                                           # the first two steps for several decks
+```
+
+- **`mtg art`** writes `<deck>.print.toml` next to the decklist: one image per card, plus the tokens the deck makes. Community renders from mpcfill.com's index come first (borderless, full-art treatments at 800 to 1200 dpi, print-ready); Scryfall printings are the fallback. `--style fullart | borderless | classic | newest` sets what "nice" means, `--basics vary | same` whether basic lands get several arts. Cards the ledger says are printed are locked to the art they were printed with.
+- **`mtg gallery`** serves a phone-first page: the chosen image, every alternative, badges for render, scan, upscale, printed. A tap saves straight into the print file. It listens on every interface, advertises the Mac's Tailscale address when Tailscale is up (else the LAN address), and needs the random token in its URL. The macOS firewall has to allow `python` once for the phone to reach it. `mtg ship` runs it in a `tmux` session so it outlives the agent.
+- **`mtg print`** compares the decklist with the ledger, prepares every image we make ourselves (fills a scan's transparent corners, upscales anything under 600 dpi to 800 with Upscayl's `ultrasharp-4x`, adds the 1/8 inch bleed), uploads those to your Google Drive, and writes the MPC Autofill XML into the decks repo's `printed/orders/`. Every id in the XML is a Google Drive file id: the shop fetches the images itself. `--full` prints the whole deck; `--to notmpc` opens the shop with the steps; `--to mpc` prepares a folder for the mpc-autofill desktop tool instead.
+- **The ledger** lives in the decks repo: `printed/ledger.csv`, the archived order XMLs, and `tools/printed.py`. `mtg placed` records an order there and commits.
+
+Set-up beyond the card data:
+
+1. `brew install --cask upscayl` for the upscaler. The first run copies its engine into `data/upscayl/` and clears macOS's quarantine flag, because the copy inside the app hangs when run headless. Without it, images are resampled, not upscaled, and the report says so.
+2. `brew install rclone`, then `rclone config` once: a Google Drive remote named `gdrive` (type `drive`; the `drive.file` scope is enough). Prepared images go into a Drive folder called `MTG proxies`, shared by link, so the shop can fetch them. Until this is done, `mtg print` writes an XML without those cards and says which.
+3. The decks repo cloned at `decks/`, with its `tools/printed.py` and `printed/` folder.
+
+Everything downloaded or prepared lands under `data/art/` and is reused.
+
 ### Network access
 
-The script talks to `api.scryfall.com`, `data.scryfall.io`, `magic.wizards.com`, `media.wizards.com` and `json.commanderspellbook.com`. In a sandboxed environment all five need to be allowed. `mtg ideas` also needs `json.edhrec.com`.
+The script talks to `api.scryfall.com`, `data.scryfall.io`, `magic.wizards.com`, `media.wizards.com` and `json.commanderspellbook.com`. In a sandboxed environment all five need to be allowed. `mtg ideas` also needs `json.edhrec.com`. Printing adds `mpcfill.com` (the render index), `drive.google.com` and `drive.usercontent.google.com` (render downloads), `cards.scryfall.io` (scans) and whatever `rclone` needs for Google Drive.

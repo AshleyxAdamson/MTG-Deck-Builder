@@ -11,7 +11,11 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
+from pathlib import Path
+
 from . import cards, decks, edhrec
+from .printing import art as art_module
+from .printing import export, ledger, printfile, send
 
 server = MCPServer(
     "mtg-cards",
@@ -193,6 +197,132 @@ def validate_deck(
     """
     with card_index() as db:
         return decks.validate_deck(db, commanders, decks.parse_decklist("\n".join(cards_in_deck)), rules)
+
+
+@server.tool()
+def choose_art(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file, e.g. decks/treefolk-quickbeam-v2.txt.")],
+    style: Annotated[Literal["fullart", "borderless", "classic", "newest"], Field(
+        description="What 'nice' means: fullart (default) prefers borderless, full-art, showcase and extended-art "
+                    "treatments; classic prefers the plain modern frame; newest the latest printing.")] = "fullart",
+    printed_as: Annotated[str | None, Field(
+        description="The physical deck this list upgrades, when the decklist has a new name "
+                    "(e.g. 'treefolk-quickbeam' for treefolk-quickbeam-v2.txt), so the ledger's prints count.")] = None,
+    basics: Annotated[Literal["vary", "same"] | None, Field(
+        description="Spread basic lands over several arts (vary, default) or print one art (same). Ask the user once per deck.")] = None,
+    keep: Annotated[bool, Field(description="Keep choices the user or the ledger made; only fill gaps.")] = False,
+    renders: Annotated[bool, Field(description="Use community renders from mpcfill (default). False for Scryfall printings only.")] = True,
+    tokens: Annotated[bool, Field(description="Add the tokens the deck makes to the order.")] = True,
+    allow_lowres: Annotated[bool, Field(description="Accept low-resolution scans when nothing better exists.")] = False,
+    artist: Annotated[str | None, Field(description="Prefer this artist everywhere.")] = None,
+) -> dict:
+    """Choose a printing for every card in a decklist and write <deck>.print.toml next to it.
+
+    Cards the ledger says are already printed are locked to the art they were printed with and are not
+    re-chosen or re-printed. New cards get the best community render (800 to 1200 dpi) when one exists,
+    else the best Scryfall printing (a 300 dpi scan that will be upscaled). Returns counts: printed, new,
+    renders, scans, which cards will be upscaled, which only exist low-res, and which have no image yet.
+    Read those back to the user, then open the gallery with art_gallery so they can swap any card.
+    """
+    with card_index() as db:
+        _, report = art_module.choose_art(
+            db, Path(decklist), style=style, basics=basics, keep=keep, renders=renders,
+            allow_lowres=allow_lowres, printed_as=printed_as, with_tokens=tokens, artist=artist)
+        return report
+
+
+@server.tool()
+def art_gallery(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file. Run choose_art first.")],
+) -> dict:
+    """Serve the deck's art gallery (phone-friendly; reachable over Tailscale when it is up) in a tmux
+    session that outlives this call, and return its URL. Clicks in the gallery save straight into the
+    print file. Tell the user the URL and wait for them to say they are done, then call print_deck.
+    """
+    url = _cli().start_gallery_in_tmux(Path(decklist))
+    return {"url": url, "stop": f"tmux kill-session -t mtg-gallery-{Path(decklist).stem}"}
+
+
+@server.tool()
+def set_art(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file.")],
+    name: Annotated[str, Field(description="The card's name as it appears in the decklist (or '<Token> token').")],
+    source: Annotated[Literal["mpcfill", "scryfall"] | None, Field(description="Where the image comes from.")] = None,
+    id: Annotated[str | None, Field(description="The Google Drive id (mpcfill) or Scryfall id of the printing.")] = None,
+    upscale: Annotated[Literal["auto", "never", "always"] | None, Field(description="Override the upscale rule for this card.")] = None,
+) -> dict:
+    """Set one card's art or upscale mode by hand. Without source and id, returns the card's candidates so you
+    can pick (each with source, id, label, artist, dpi), best first."""
+    path = Path(decklist)
+    if source and id or upscale:
+        return art_module.set_art(path, name, source, id, upscale=upscale)
+    with card_index() as db:
+        pf = printfile.load(printfile.path_for(path))
+        _, cards_out = art_module.gallery_payload(db, path, pf)
+        entry = next((c for c in cards_out if c["name"] == name), None)
+        if entry is None:
+            raise ToolError(f"{name} is not in the print file; run choose_art first.")
+        return {"name": name, "chosen": entry["chosen"], "candidates": entry["candidates"][:30]}
+
+
+@server.tool()
+def print_deck(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file.")],
+    to: Annotated[Literal["notmpc", "mpc", "none"], Field(
+        description="Shop to send to. notmpc (default) opens the order page with instructions; mpc prepares a folder "
+                    "for the mpc-autofill desktop tool; none only writes the XML.")] = "notmpc",
+    full: Annotated[bool, Field(description="Print the whole deck, ignoring the ledger.")] = False,
+    allow_lowres: Annotated[bool, Field(description="Print low-resolution scans rather than leaving the card out.")] = False,
+    upload: Annotated[bool, Field(description="Upload prepared images to the user's Google Drive via rclone (needed for the shop to fetch them).")] = True,
+) -> dict:
+    """Preflight, prepare images (fill, upscale under 600 dpi, add bleed), upload our own images to Drive, and
+    write the MPC Autofill XML for the cards not yet printed into the decks repo's printed/orders/.
+
+    Returns the delta (to_print, already, to_pull), the order size and tier, every upscale done, the
+    problems found, the XML path, and the shop steps left for the user. `ok` is false when the XML is
+    incomplete (missing images, images not on Drive yet). After the user pays, call record_order.
+    """
+    with card_index() as db:
+        report = export.export(db, Path(decklist), full=full, allow_lowres=allow_lowres, upload=upload)
+    if to != "none" and report.get("xml") and report["ok"]:
+        paths = [Path(report["xml"])]
+        report["send"] = send.to_notmpc(paths) if to == "notmpc" else send.to_mpc(paths)
+    return report
+
+
+@server.tool()
+def record_order(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file.")],
+    order: Annotated[str | None, Field(description="The shop's order number, for the commit message.")] = None,
+    date: Annotated[str | None, Field(description="YYYY-MM-DD the order was placed.")] = None,
+) -> str:
+    """Record the order print_deck just wrote in the decks repo's ledger (printed/ledger.csv) and commit there,
+    so the next print only contains new cards. Call it once the user confirms they paid."""
+    path = Path(decklist)
+    pf = printfile.load(printfile.path_for(path))
+    xml = _cli()._latest_order(path, pf.get("printed_as"))
+    try:
+        return ledger.record(path, xml, date, pf.get("printed_as")) + (f" Order {order}." if order else "")
+    except cards.CardDataError as error:
+        raise ToolError(str(error)) from error
+
+
+@server.tool()
+def printed_diff(
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file.")],
+    printed_as: Annotated[str | None, Field(description="The physical deck's name when the list has a new name.")] = None,
+) -> dict:
+    """What a decklist still needs printed and what to take out, from the ledger. No images involved."""
+    with card_index() as db:
+        deck, _, _ = art_module.read_deck(Path(decklist))
+        _, counts = art_module.resolve(db, deck)
+    delta = ledger.delta(Path(decklist), counts, printed_as)
+    return {k: dict(v) if hasattr(v, "items") else v for k, v in delta.items()}
+
+
+def _cli():
+    from . import cli
+    return cli
 
 
 def main() -> None:
