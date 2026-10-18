@@ -41,7 +41,7 @@ SORTS = {
 MAX_LIMIT = 100
 
 # Bump when the tables change, so existing indexes are rebuilt.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SCHEMA = """
 CREATE TABLE cards (
     oracle_id TEXT, name TEXT COLLATE NOCASE, is_extra INTEGER, mana_cost TEXT, cmc REAL,
@@ -64,6 +64,20 @@ CREATE TABLE tag_names (key TEXT PRIMARY KEY, slug TEXT);
 CREATE TABLE card_tags (oracle_id TEXT, tag TEXT);
 CREATE INDEX card_tags_tag ON card_tags (tag, oracle_id);
 CREATE INDEX card_tags_oracle_id ON card_tags (oracle_id);
+-- Every printing of every card, for choosing art to print. Images of double-faced
+-- cards live on the faces in Scryfall's data; here the front is image_* and the back back_*.
+CREATE TABLE printings (
+    oracle_id TEXT, scryfall_id TEXT, name TEXT COLLATE NOCASE, set_code TEXT, set_name TEXT,
+    collector_number TEXT, released_at TEXT, lang TEXT, paper INTEGER, digital INTEGER,
+    oversized INTEGER, image_status TEXT, highres INTEGER, full_art INTEGER, textless INTEGER,
+    border_color TEXT, frame TEXT, frame_effects TEXT, promo_types TEXT, finishes TEXT,
+    set_type TEXT, security_stamp TEXT, artist TEXT, layout TEXT,
+    image_png TEXT, image_normal TEXT, image_large TEXT, back_png TEXT, back_normal TEXT,
+    tokens TEXT
+);
+CREATE INDEX printings_oracle_id ON printings (oracle_id);
+CREATE INDEX printings_name ON printings (name);
+CREATE INDEX printings_scryfall_id ON printings (scryfall_id);
 """
 FACE_FIELDS = ("name", "mana_cost", "type_line", "oracle_text", "power", "toughness", "loyalty")
 
@@ -93,26 +107,73 @@ def _to_number(value):
         return None
 
 
-def _cheapest_prices() -> dict[str, tuple[float, str]]:
-    """The lowest US dollar price of each card across its printings, and which printing that is.
+def _note_price(printing: dict, oracle_id: str, cheapest: dict[str, tuple[bool, float, str]]) -> None:
+    """Keep the lowest US dollar price of each card across its printings, and which printing that is.
 
     The Oracle file prices only the newest printing, which is often an unreleased or
     digital one with no price at all. Printings that are not real, playable paper cards
     (oversized, gold-bordered, collector's editions) only count when nothing else is priced.
     """
-    cheapest: dict[str, tuple[bool, float, str]] = {}
+    prices = [float(printing["prices"][key]) for key in ("usd", "usd_foil", "usd_etched")
+              if printing["prices"].get(key)]
+    if not prices or "paper" not in printing["games"]:
+        return
+    novelty = (printing["oversized"] or printing["border_color"] == "gold"
+               or printing["set_type"] == "memorabilia")
+    offer = (novelty, min(prices), printing["set_name"])
+    if oracle_id not in cheapest or offer < cheapest[oracle_id]:
+        cheapest[oracle_id] = offer
+
+
+def _printing_row(printing: dict, oracle_id: str) -> dict:
+    """One printing, with its images, for choosing art to print."""
+    faces = printing.get("card_faces") or []
+    front = printing.get("image_uris") or (faces[0].get("image_uris") if faces else None) or {}
+    # Only a double-faced card keeps images on its faces; split and adventure cards have one image.
+    back = faces[1].get("image_uris") if printing.get("image_uris") is None and len(faces) > 1 else None
+    back = back or {}
+    return {
+        "oracle_id": oracle_id,
+        "scryfall_id": printing["id"],
+        "name": printing["name"],
+        "set_code": printing.get("set"),
+        "set_name": printing.get("set_name"),
+        "collector_number": printing.get("collector_number"),
+        "released_at": printing.get("released_at"),
+        "lang": printing.get("lang"),
+        "paper": int("paper" in printing.get("games", [])),
+        "digital": int(bool(printing.get("digital"))),
+        "oversized": int(bool(printing.get("oversized"))),
+        "image_status": printing.get("image_status"),
+        "highres": int(bool(printing.get("highres_image"))),
+        "full_art": int(bool(printing.get("full_art"))),
+        "textless": int(bool(printing.get("textless"))),
+        "border_color": printing.get("border_color"),
+        "frame": printing.get("frame"),
+        "frame_effects": json.dumps(printing.get("frame_effects") or []),
+        "promo_types": json.dumps(printing.get("promo_types") or []),
+        "finishes": json.dumps(printing.get("finishes") or []),
+        "set_type": printing.get("set_type"),
+        "security_stamp": printing.get("security_stamp"),
+        "artist": printing.get("artist"),
+        "layout": printing.get("layout"),
+        "image_png": front.get("png"),
+        "image_normal": front.get("normal"),
+        "image_large": front.get("large"),
+        "back_png": back.get("png"),
+        "back_normal": back.get("normal"),
+        "tokens": json.dumps([p["id"] for p in printing.get("all_parts") or [] if p.get("component") == "token"]),
+    }
+
+
+def _printing_rows(cheapest: dict[str, tuple[bool, float, str]]):
+    """Every printing as a row, noting each card's cheapest price along the way (one pass over 80 MB)."""
     for printing in _read_jsonl(PRINTINGS_FILE):
-        prices = [float(printing["prices"][key]) for key in ("usd", "usd_foil", "usd_etched")
-                  if printing["prices"].get(key)]
-        if not prices or "paper" not in printing["games"]:
+        oracle_id = printing.get("oracle_id") or (printing.get("card_faces") or [{}])[0].get("oracle_id")
+        if not oracle_id:
             continue
-        oracle_id = printing.get("oracle_id") or printing["card_faces"][0].get("oracle_id")
-        novelty = (printing["oversized"] or printing["border_color"] == "gold"
-                   or printing["set_type"] == "memorabilia")
-        offer = (novelty, min(prices), printing["set_name"])
-        if oracle_id not in cheapest or offer < cheapest[oracle_id]:
-            cheapest[oracle_id] = offer
-    return {oracle_id: (price, set_name) for oracle_id, (_, price, set_name) in cheapest.items()}
+        _note_price(printing, oracle_id, cheapest)
+        yield _printing_row(printing, oracle_id)
 
 
 def _card_row(card: dict, cheapest: dict[str, tuple[float, str]]) -> dict:
@@ -203,7 +264,7 @@ def build_index(stamp: str) -> None:
     db = sqlite3.connect(part)
     try:
         formats: set[str] = set()
-        cheapest = _cheapest_prices()
+        offers: dict[str, tuple[bool, float, str]] = {}
 
         def card_rows():
             for card in _read_jsonl(CARDS_FILE):
@@ -212,6 +273,13 @@ def build_index(stamp: str) -> None:
 
         with db:
             db.executescript(SCHEMA)
+            printing_columns = [row[1] for row in db.execute("PRAGMA table_info(printings)")]
+            db.executemany(
+                f"INSERT INTO printings ({', '.join(printing_columns)}) "
+                f"VALUES ({', '.join(':' + c for c in printing_columns)})",
+                _printing_rows(offers),
+            )
+            cheapest = {oracle_id: (price, set_name) for oracle_id, (_, price, set_name) in offers.items()}
             columns = [row[1] for row in db.execute("PRAGMA table_info(cards)")]
             db.executemany(
                 f"INSERT INTO cards ({', '.join(columns)}) VALUES ({', '.join(':' + c for c in columns)})",
@@ -477,6 +545,32 @@ def get_card(db: sqlite3.Connection, name: str) -> dict:
     if row["faces"]:
         card["faces"] = json.loads(row["faces"])
     return {key: value for key, value in card.items() if value is not None}
+
+
+def printings_of(db: sqlite3.Connection, oracle_id: str) -> list[dict]:
+    """Every printing of a card, newest first, with the JSON columns decoded."""
+    rows = db.execute(
+        "SELECT * FROM printings WHERE oracle_id = ? ORDER BY released_at DESC, collector_number", [oracle_id]
+    ).fetchall()
+    printings = []
+    for row in rows:
+        printing = dict(row)
+        for key in ("frame_effects", "promo_types", "finishes", "tokens"):
+            printing[key] = json.loads(printing[key] or "[]")
+        printings.append(printing)
+    return printings
+
+
+def token_oracle_ids(db: sqlite3.Connection, oracle_id: str) -> set[str]:
+    """The tokens a card makes, as the tokens' own Oracle IDs, from Scryfall's related parts."""
+    token_ids: set[str] = set()
+    for row in db.execute("SELECT tokens FROM printings WHERE oracle_id = ?", [oracle_id]):
+        token_ids.update(json.loads(row["tokens"] or "[]"))
+    if not token_ids:
+        return set()
+    marks = ", ".join("?" for _ in token_ids)
+    return {row["oracle_id"] for row in db.execute(
+        f"SELECT DISTINCT oracle_id FROM printings WHERE scryfall_id IN ({marks})", list(token_ids))}
 
 
 def get_rulings(db: sqlite3.Connection, name: str) -> dict:

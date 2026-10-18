@@ -10,3 +10,8 @@ __pycache__/
 
 # Your own decks. Keep them in their own repo if you want history.
 /decks/
+
+# Printing: downloaded art, prepared images, the upscaler copy, browser profiles
+/data/art/
+/data/upscayl/
+/data/browser/

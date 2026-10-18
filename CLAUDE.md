@@ -16,3 +16,7 @@ Three things must be in place on this machine. When one is missing, follow "Sett
 - `decks/` is ignored by this repo, so each person's decks stay out of it. It may be its own git repo: when `decks/.git` exists, commit deck changes there, never here. `examples/brief.md` is the sample brief that ships.
 - `data/` is downloaded, never committed; `uv run mtg update` refreshes it.
 - There is no test suite. Verify a code change by running the commands against the real data.
+
+## Printing a deck
+
+Use the `print-deck` skill (`.claude/skills/print-deck/`) for every print, reprint or order. The decks repo's `printed/` folder is the ledger of what is already in the box; never print a card the ledger has unless the user asks. The order XML and the ledger are committed in the decks repo, not here. `docs/spec/print-suite.md` is the design; `docs/research/proxy-printing.md` and `docs/research/upscale-spike.md` the evidence.
