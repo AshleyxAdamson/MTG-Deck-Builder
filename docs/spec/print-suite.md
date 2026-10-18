@@ -348,7 +348,7 @@ mtg_deck_builder/printing/
   gallery.py     # HTML template (phone first), http.server with token, Tailscale/LAN bind, POST /choose and POST /upscale
   prepare.py     # Pillow: corner fill, bleed, plain back, colour-shift check, prepared-image cache
   upscale.py     # effective dpi, engine detection (upscayl-bin, command, none), 4x run + Lanczos downscale
-  ledger.py      # thin wrapper over the decks repo's tools/printed.py: diff, add, last order's cardback, next order number
+  ledger.py      # thin wrapper over the decks repo's tools/printed.py: diff, add, next order number
   tokens.py      # tokens a deck makes, from Scryfall all_parts
   export.py      # xml (delta or full, one file per deck), preflight
   notmpc.py      # Playwright driver: saved login, form fill per XML, one cart, stop at checkout, failure screenshot
