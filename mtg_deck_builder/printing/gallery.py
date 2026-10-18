@@ -13,6 +13,7 @@ import html
 import inspect
 import ipaddress
 import json
+import re
 import secrets
 import socket
 import subprocess
@@ -27,6 +28,7 @@ TAILSCALE = "/opt/homebrew/bin/tailscale"
 LIFETIME_SECONDS = 24 * 60 * 60
 LOW_DPI = 600
 MAX_BODY = 1_000_000
+MAX_STYLE_CHIPS = 12
 
 
 # ---------------------------------------------------------------- page
@@ -53,6 +55,36 @@ def _same(a: dict, b: dict) -> bool:
     return bool(a) and bool(b) and a.get("id") == b.get("id") and a.get("source") == b.get("source")
 
 
+def _styles(cand: dict) -> list[str]:
+    """The candidate's style keys: clean strings, no duplicates, no empties ([] when unknown)."""
+    raw = cand.get("styles") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    out: list[str] = []
+    for k in raw if isinstance(raw, (list, tuple)) else []:
+        k = str(k).strip().replace("|", "")
+        if k and k not in out:
+            out.append(k)
+    return out
+
+
+def _style_counts(cards: list[dict]) -> list[tuple[str, int]]:
+    """Style keys on the page, most common first (ties alphabetical), at most MAX_STYLE_CHIPS."""
+    counts: dict[str, int] = {}
+    for card in cards:
+        for cand in card.get("candidates") or []:
+            for k in _styles(cand):
+                counts[k] = counts.get(k, 0) + 1
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:MAX_STYLE_CHIPS]
+
+
+def _style_buttons(cards: list[dict]) -> str:
+    return "".join(
+        f'<button type="button" data-key="{_esc(k)}" aria-pressed="false" title="{n} candidates">{_esc(k)}</button>'
+        for k, n in _style_counts(cards)
+    )
+
+
 def _chip(cls: str, text: str) -> str:
     return f'<span class="chip {cls}">{text}</span>'
 
@@ -64,15 +96,17 @@ def _slide(j: int, cand: dict, chosen: dict) -> str:
     big = f'<img class="large" alt="" loading="lazy" decoding="async" src="{large}">' if large else ""
     label = cand.get("label") or cand.get("id")
     second = " · ".join(x for x in (cand.get("artist"), _dpi(cand)) if x)
+    keys = _styles(cand)
+    std = cand.get("standard") is not False
     chips = _chip(_style(cand), _style(cand).upper())
-    if cand.get("fancy"):
-        chips += _chip("fancy", "FANCY")
-    if cand.get("universes_beyond"):
-        chips += _chip("ub", "UB")
+    chips += "".join(_chip("sty", _esc(k)) for k in keys)
+    if not std:
+        chips += _chip("nostd", "NO RULES BOX")
+    ub = bool(cand.get("universes_beyond")) or "universes-beyond" in keys
     q = f'{cand.get("label", "")} {cand.get("artist") or ""}'.lower()
     return (
         f'<figure class="slide{" on" if on else ""}" data-j="{j}" data-style="{_style(cand)}" '
-        f'data-fancy="{int(bool(cand.get("fancy")))}" data-ub="{int(bool(cand.get("universes_beyond")))}" data-q="{_esc(q)}">'
+        f'data-styles="|{_esc("|".join(keys))}|" data-std="{int(std)}" data-ub="{int(ub)}" data-q="{_esc(q)}">'
         f'<div class="img" role="img" aria-label="{_esc(label)}">{ph}{big}</div>'
         f'<figcaption><span class="l">{_esc(label)}</span><span class="a">{_esc(second)}</span>'
         f'<span class="chips">{chips}</span></figcaption>'
@@ -166,9 +200,10 @@ def render(deck: dict, cards: list[dict]) -> str:
     stats_html = "".join(f'<li><b>{_esc(v)}</b> {k}</li>' for k, v in stats if v is not None)
     data = {"deck": {"name": deck.get("name")}, "cards": cards}
     data_json = json.dumps(data, ensure_ascii=False).replace("<", "\\u003c").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-    return (PAGE.replace("@@TITLE@@", _esc(deck.get("name") or "Gallery"))
-            .replace("@@STATS@@", stats_html).replace("@@BODY@@", body)
-            .replace("@@CSS@@", CSS).replace("@@JS@@", JS).replace("@@DATA@@", data_json))
+    parts = {"TITLE": _esc(deck.get("name") or "Gallery"), "STATS": stats_html, "BODY": body,
+             "STYLES": _style_buttons(cards), "CSS": CSS, "JS": JS, "DATA": data_json}
+    # One pass, so text inside a card name can never be mistaken for a placeholder.
+    return re.sub(r"@@([A-Z]+)@@", lambda m: parts[m.group(1)], PAGE)
 
 
 def write(deck: dict, cards: list[dict], out_path: Path) -> Path:
@@ -187,10 +222,11 @@ PAGE = """<!doctype html>
 <header><h1>@@TITLE@@</h1><ul class="stats">@@STATS@@</ul></header>
 <div class="bar"><span id="count">0 changed</span><button type="button" id="copy">Copy choices</button></div>
 <div class="filters">
-<div class="chips" role="group" aria-label="Style">
-<button type="button" data-style="all" class="on">all</button><button type="button" data-style="render">renders</button>
-<button type="button" data-style="scan">scans</button><button type="button" data-style="fancy">fancy only</button></div>
+<div class="chips" id="fchips" role="group" aria-label="Style">
+<button type="button" data-src="all" class="on">all</button><button type="button" data-src="render">renders</button>
+<button type="button" data-src="scan">scans</button>@@STYLES@@</div>
 <label class="chk"><input type="checkbox" id="noub"> hide Universes Beyond</label>
+<label class="chk"><input type="checkbox" id="std"> standard frames only</label>
 <input type="search" id="q" placeholder="Filter by artist or name" autocomplete="off"></div>
 <main>@@BODY@@<p id="none" hidden>Nothing matches these filters.</p></main>
 <div id="toast" role="status" hidden></div>
@@ -228,8 +264,9 @@ main{padding-bottom:60px}.grp{margin:22px 0 8px;font-size:16px;color:var(--acc);
 .img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.img img.ph{filter:blur(2px)}
 figcaption{display:flex;flex-direction:column;gap:2px;min-height:4.6em}.l{overflow-wrap:anywhere;font-weight:600}.a{color:var(--dim);font-size:13px}
 .chips .chip{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:var(--panel2);border:1px solid var(--line)}
-.chip.render{color:var(--ok)}.chip.scan{color:var(--warn)}.chip.fancy{color:#c79bff}.chip.ub{color:var(--acc)}
-.slide .chips{display:flex;gap:4px;margin-top:2px}
+.chip.render{color:var(--ok)}.chip.scan{color:var(--warn)}.chip.sty{color:var(--acc);text-transform:uppercase}
+.chip.nostd{color:var(--dim);background:transparent;border-style:dashed}
+.slide .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
 .use{width:100%;min-height:44px;border:1px solid var(--acc);border-radius:8px;background:var(--acc);color:#0b1020;font-weight:700}
 .use:disabled{background:var(--panel2);border-color:var(--line);color:var(--dim)}.slide.busy{opacity:.55}
 .arr{display:none;width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);font-size:24px;line-height:1;padding:0}
@@ -249,7 +286,7 @@ JS = r"""
 'use strict';
 var D=JSON.parse(document.getElementById('data').textContent), cards=D.cards;
 var T=new URLSearchParams(location.search).get('t')||'';
-var KEY='gallery:'+(D.deck.name||''), changed={}, f={style:'all',noub:false,q:''};
+var KEY='gallery:'+(D.deck.name||''), changed={}, f={src:'all',sty:[],noub:false,std:false,q:''};
 function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 function store(k,v){try{if(v===undefined)return localStorage.getItem(KEY+k);localStorage.setItem(KEY+k,v)}catch(e){}return null}
@@ -354,8 +391,10 @@ function apply(){
     var c=cards[+r.dataset.i],nameHit=!q||String(c.name).toLowerCase().indexOf(q)>=0,hit=nameHit;
     $$('.slide',r).forEach(function(s){
       var ok=true,on=s.classList.contains('on');
-      if(f.style==='fancy')ok=s.dataset.fancy==='1';else if(f.style!=='all')ok=s.dataset.style===f.style;
+      if(f.src!=='all'&&s.dataset.style!==f.src)ok=false;
+      if(f.sty.length&&!f.sty.some(function(k){return s.dataset.styles.indexOf('|'+k+'|')>=0}))ok=false;
       if(f.noub&&s.dataset.ub==='1')ok=false;
+      if(f.std&&s.dataset.std==='0')ok=false;
       var m=nameHit||s.dataset.q.indexOf(q)>=0;if(m&&ok)hit=true;
       s.hidden=!(on||(ok&&m));
     });
@@ -366,14 +405,30 @@ function apply(){
   store('filters',JSON.stringify(f));
 }
 
-function filters(){
-  try{var s=JSON.parse(store('filters')||'null');if(s)f=Object.assign(f,s)}catch(e){}
-  $$('.chips>button').forEach(function(b){
-    b.classList.toggle('on',b.dataset.style===f.style);
-    b.addEventListener('click',function(){f.style=b.dataset.style;$$('.chips>button').forEach(function(x){x.classList.toggle('on',x===b)});apply()});
+function chipState(){
+  $$('#fchips>button').forEach(function(b){
+    var on=b.dataset.key?f.sty.indexOf(b.dataset.key)>=0:b.dataset.src==='all'?(f.src==='all'&&!f.sty.length):b.dataset.src===f.src;
+    b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false');
   });
-  $('#noub').checked=f.noub;$('#q').value=f.q;
+}
+function filters(){
+  try{var s=JSON.parse(store('filters')||'null');if(s&&typeof s==='object')f=Object.assign(f,s)}catch(e){}
+  var keys=$$('#fchips>button[data-key]').map(function(b){return b.dataset.key});
+  if(f.src!=='render'&&f.src!=='scan')f.src='all';
+  f.sty=(Array.isArray(f.sty)?f.sty:[]).filter(function(k){return keys.indexOf(k)>=0});
+  f.noub=!!f.noub;f.std=!!f.std;f.q=String(f.q||'');
+  chipState();
+  $$('#fchips>button').forEach(function(b){
+    b.addEventListener('click',function(){
+      if(b.dataset.key){var k=b.dataset.key,at=f.sty.indexOf(k);if(at>=0)f.sty.splice(at,1);else f.sty.push(k)}
+      else if(b.dataset.src==='all'){f.src='all';f.sty=[]}
+      else f.src=b.dataset.src;
+      chipState();apply();
+    });
+  });
+  $('#noub').checked=f.noub;$('#std').checked=f.std;$('#q').value=f.q;
   $('#noub').addEventListener('change',function(){f.noub=this.checked;apply()});
+  $('#std').addEventListener('change',function(){f.std=this.checked;apply()});
   $('#q').addEventListener('input',function(){f.q=this.value.trim().toLowerCase();apply()});
 }
 
