@@ -338,11 +338,20 @@ def set_art(decklist: Path, name: str, source: str | None, ident: str | None, *,
         entry["chosen_by"] = "user"
     if source and ident:
         entry.update({"source": source, "id": ident, "chosen_by": "user"})
-        entry.pop("status", None)
-        entry.pop("slots", None)
-        entry.pop("slot_sources", None)
-        entry.pop("label", None)
-        entry.pop("dpi", None)
+        for key in ("status", "slots", "slot_sources", "label", "dpi", "artist"):
+            entry.pop(key, None)
+        if source == "mpcfill":
+            # Record the render's dpi and name, so the exporter uses the render as is.
+            meta = {}
+            try:
+                meta = mpcfill.cards([ident]).get(ident, {})
+            except CardDataError:
+                pass
+            if meta:
+                entry["dpi"] = int(meta.get("dpi") or 0)
+                entry["label"] = meta.get("name") or entry["name"]
+        else:
+            entry["dpi"] = printings.SCRYFALL_DPI
     if slots:
         entry["slots"] = {k: int(v) for k, v in slots.items()}
         entry["chosen_by"] = "user"
