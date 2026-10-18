@@ -25,7 +25,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 TAILSCALE = "/opt/homebrew/bin/tailscale"
-LIFETIME_SECONDS = 24 * 60 * 60
+# The gallery runs until stopped (the Mac is always on); this is only a safety net against a forgotten server.
+LIFETIME_SECONDS = 30 * 24 * 60 * 60
 LOW_DPI = 600
 MAX_BODY = 1_000_000
 MAX_STYLE_CHIPS = 12
