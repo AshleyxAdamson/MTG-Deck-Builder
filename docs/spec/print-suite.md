@@ -173,7 +173,7 @@ id = "1x...."
 label = "Treefolk token 2/2 (Showcase)"
 ```
 
-Every record carries enough to rebuild the image URL without a lookup: mpcfill ids download from `https://drive.google.com/uc?id=<id>&export=download`, Scryfall ids from the `image_png` column. `mtg art --keep` re-runs only for cards without a `chosen_by = "user"` entry, so a decklist edit does not throw away clicks.
+Every record carries enough to rebuild the image URL without a lookup: mpcfill ids download from `https://drive.google.com/uc?id=<id>&export=download`, Scryfall ids from the `image_png` column. Once an image we prepared has been uploaded, the record also carries `drive_id`, the id in the user's own Drive that the XML uses. `mtg art --keep` re-runs only for cards without a `chosen_by = "user"` entry, so a decklist edit does not throw away clicks.
 
 ## Printing only what changed
 
@@ -251,20 +251,27 @@ uv run mtg print decks/treefolk-quickbeam-v2.txt placed NMPC-12345 --date 2026-1
   </details>
   <fronts>
     <card><id>1dhVvU5rAqsBx9a-LwwKz5RpHXeTp6xKG</id><slots>0</slots><name>Cultivate (Borderless Uichi Ukumo).jpg</name><query>cultivate</query></card>
-    <card><id>cards/forest-znr-280.png</id><sourceType>Local File</sourceType><slots>62,63,...</slots><name>forest-znr-280.png</name><query>forest</query></card>
+    <card><id>1AbC...ourDriveId</id><slots>62,63,...</slots><name>forest-znr-280-800dpi.png</name><query>forest</query></card>
   </fronts>
   <backs>
-    <card><id>cards/delver-mid-47-back.png</id><sourceType>Local File</sourceType><slots>17</slots><name>...</name><query>delver of secrets</query></card>
+    <card><id>1DeF...ourDriveId</id><slots>17</slots><name>delver-mid-47-back-800dpi.png</name><query>delver of secrets</query></card>
   </backs>
-  <cardback>cards/back-000000.png</cardback>
+  <cardback>1GhI...ourDriveId</cardback>
 </order>
 ```
 
-The cardback is a plain black PNG generated locally (solid colour, full bleed, 2176x2960) and referenced as a local file; the same file goes on every order. The printed decks carry illustrated backs from the first orders, which does not matter because everything is sleeved. The first orders were written by the mpcfill site with `<bracket>` and `(S30) Standard Smooth`; the exporter leaves `bracket` out, as the current format does, and writes the stock from the print file. notmpc only prints S33 regardless.
+The cardback is a plain black PNG generated locally (solid colour, full bleed, 2176x2960), uploaded to the user's Drive once, and referenced by that id on every order. The printed decks carry illustrated backs from the first orders, which does not matter because everything is sleeved. The first orders were written by the mpcfill site with `<bracket>` and `(S30) Standard Smooth`; the exporter leaves `bracket` out, as the current format does, and writes the stock from the print file. notmpc only prints S33 regardless.
 
-Slots are 0-indexed in decklist order, copies expanded. mpcfill renders at or above `min_dpi` go in by Drive id, which is what notmpc and the mpcfill desktop tool both resolve. Scryfall images cannot go in by URL, and a render that was upscaled is no longer the Drive file, so both are written as prepared PNGs under `decks/cards/` and referenced as local files. The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
+Slots are 0-indexed in decklist order, copies expanded. **Every `<id>` is a Google Drive file id.** The shop never receives an image from us: it reads the ids out of the XML and fetches each file from Drive itself, which is how the mpcfill site's XML has always worked and what the two archived orders contain. The `Local File` source type is a feature of the mpcfill desktop tool only. So:
 
-Open question for a spike: whether notmpc's uploader accepts `Local File` entries, or only Drive ids. If not, the fallback is to upload the Scryfall-sourced cards to a Drive folder of the user's own, or to put them in the deck as separate single-image uploads. The spike is a 5-card XML with one Scryfall card, uploaded by hand.
+- A community render at or above `min_dpi` goes in by its own Drive id, untouched.
+- Anything we produce ourselves (a Scryfall scan with corners filled and bleed added, an upscaled render or scan, the plain back) is uploaded to a folder in the user's own Google Drive, shared as "anyone with the link can view", and goes in by the id Drive returns. See "Our own Drive folder" below.
+
+The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
+
+**Our own Drive folder** (`printing/drive.py`). One folder, `MTG proxies/`, in the user's Google Drive, with one file per prepared image named `<source>-<id>-<dpi>.png` so a re-export finds the file it already uploaded instead of uploading again (the print file records the Drive id under `drive_id` once uploaded). Uploading goes through `rclone`, which handles Google's OAuth in a one-time `rclone config` session and needs no code of ours for tokens: `rclone copy` puts the file up, `rclone link` makes it viewable by anyone with the link and returns the id. `rclone` installs with Homebrew and is listed in the README's setup. A Drive API client of our own is the alternative if `rclone` gets in the way; the module's interface (`upload(path) -> drive_id`, `exists(name) -> drive_id | None`) hides which. The shop fetches each file anonymously, so "anyone with the link" is required; the folder holds only card images. A deck's worth of prepared images is 10 to 50 files of 2 to 6 MB, well inside a free Drive.
+
+Spike 1 checks the two things this rests on: that notmpc fetches an id from a private person's Drive the same way it fetches a community one, and that the anonymous fetch works with "anyone with the link". The test is a 5-card XML with four community ids and one id from the user's Drive, uploaded by hand.
 
 **Image preparation** (`printing/prepare.py`, needs Pillow, the one new Python dependency) runs on every chosen image before it reaches an export, in this order: fill, upscale, bleed. Each output is cached under `data/art/prepared/<source>/<id>-<dpi>-<model>.png`, so a second export is instant.
 
@@ -306,11 +313,11 @@ Raw downloads live in `data/art/<source>/<id>.<ext>` and prepared images beside 
 **`send --to notmpc`** (`printing/notmpc.py`) drives the shop's order form with Playwright and stops at the pay button. notmpc is the default shop: it prints in Los Angeles on the same S33 stock as MakePlayingCards, so a deck arrives in about a week with no import fees.
 
 - *Saved login.* The driver uses a persistent browser profile under `data/browser/notmpc/`. The first run opens a visible window on the shop's sign-in page and waits for the user to log in; every later run reuses the session. Nothing about the account is stored anywhere but that profile, and `mtg print --forget-login notmpc` deletes it.
-- *The form.* Open the custom cards product, choose black border, 63x88 mm, S33 and the quantity tier, upload the XML, wait for the uploader to place every image, check that the slot count on the page matches the order, add to cart, repeat for the next deck's XML, then open the checkout page in a visible window. The user pays there. If the uploader does not accept local-file entries (spike 1), the driver uploads those images one by one through the single-image uploader instead, which is slower but needs no Drive account.
+- *The form.* Open the custom cards product, choose black border, 63x88 mm, S33 and the quantity tier, upload the XML, wait for the page to fetch every image from Drive and place it, check that the slot count on the page matches the order and that no slot is blank (a blank one means a Drive id the shop could not fetch, which is reported by card name), add to cart, repeat for the next deck's XML, then open the checkout page in a visible window. The user pays there. If the shop ever stops fetching from a personal Drive, the fallback is the single-image uploader for our own files, one by one, driven by the same script.
 - *Brittleness.* Every selector lives in one table at the top of the module with a comment naming the page element. A changed page fails fast with a screenshot in `data/browser/notmpc/last-failure.png` and the message "notmpc changed their page; the XML is at ..., upload it by hand", so the fallback is always the manual path the user already knows.
 - *After paying* the agent asks for the order number and runs `placed`, which records the order in the ledger and commits in the decks repo. The price is read from the checkout page and shown before the user pays.
 
-**`send --to mpc`** is the fallback, for when notmpc is down or out of stock: the same stock from the Hong Kong factory, with weeks of shipping and import fees on a small US order. First version: write the XML into its own folder and, when the `mpc-autofill` desktop tool is installed (`--autofill-bin`), run it there with `--site MakePlayingCards`; the tool opens Chrome and waits for the user to log in. Every Scryfall-sourced card is a local file for this path, which the exporter already does. Later: the same Playwright driver pattern with a saved MPC login.
+**`send --to mpc`** is the fallback, for when notmpc is down or out of stock: the same stock from the Hong Kong factory, with weeks of shipping and import fees on a small US order. First version: write the XML into its own folder and, when the `mpc-autofill` desktop tool is installed (`--autofill-bin`), run it there with `--site MakePlayingCards`; the tool opens Chrome and waits for the user to log in. The same XML works unchanged, since our own images are on Drive by then; the tool downloads them like any other id (it needs a Drive API key of its own for that, which its release builds carry). Later: the same Playwright driver pattern with a saved MPC login.
 
 ## Agent surface
 
@@ -350,31 +357,32 @@ mtg_deck_builder/printing/
   upscale.py     # effective dpi, engine detection (upscayl-bin, command, none), 4x run + Lanczos downscale
   ledger.py      # thin wrapper over the decks repo's tools/printed.py: diff, add, next order number
   tokens.py      # tokens a deck makes, from Scryfall all_parts
+  drive.py       # the user's own Drive folder via rclone: upload prepared images, share by link, remember ids
   export.py      # xml (delta or full, one file per deck), preflight
   notmpc.py      # Playwright driver: saved login, form fill per XML, one cart, stop at checkout, failure screenshot
   send.py        # dispatch: notmpc, mpc
   sources.toml   # default mpcfill source order
 ```
 
-`cards.py` gains the `printings` table and a `tokens_of` lookup in `build_index`, and a `printings_of(db, oracle_id)` query. `cli.py` gains `ship`, plus `art`, `gallery`, `print`, `print ... prepare` and `print ... placed` as its parts. `pyproject.toml` gains `pillow` and `playwright` (plus `uv run playwright install chromium` once, in the README's setup steps). Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/` and `data/browser/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `printed/` and `cards/` land; add `/data/art/` and `/data/browser/`. The decks repo keeps `tools/printed.py`, `printed/ledger.csv` and `printed/orders/`; this repo only calls them.
+`cards.py` gains the `printings` table and a `tokens_of` lookup in `build_index`, and a `printings_of(db, oracle_id)` query. `cli.py` gains `ship`, plus `art`, `gallery`, `print`, `print ... prepare` and `print ... placed` as its parts. `pyproject.toml` gains `pillow` and `playwright` (plus `uv run playwright install chromium` once, in the README's setup steps). Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `rclone` (`brew install rclone`, then `rclone config` once for a Google Drive remote named `gdrive`) is required for any order that contains an image we prepared ourselves, which in practice is every order. `README.md` gains a "Printing a deck" section and the data table gains `data/art/` and `data/browser/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `printed/` and `cards/` land; add `/data/art/` and `/data/browser/`. The decks repo keeps `tools/printed.py`, `printed/ledger.csv` and `printed/orders/`; this repo only calls them.
 
 ## Milestones
 
 Each one ships on its own and is checked against the real Treefolk deck, as the repo has no test suite.
 
-1. **Spikes (one day).** Upload a hand-written 5-card XML to notmpc with four Drive ids and one `Local File`; record what the uploader does with each. Download 100 Drive files in a row and note any throttling. Install Upscayl, time `upscayl-bin` on a 745x1040 scan on this machine, and run three models (`ultrasharp-4x`, `digital-art-4x`, `high-fidelity-4x`) plus one halftone-aware route on three test cards: a 2015-frame scan, a 2003-frame scan with visible rosettes, and a 500 dpi render. Judge the rules text and the copyright line at 800 dpi by eye and record the colour-shift numbers. Print one bleed-padded upscaled Scryfall PNG and one render through notmpc's single-card uploader to compare at the table. These settle the open questions below and fix the default model.
+1. **Spikes (one day).** Put one prepared PNG in the user's Drive with `rclone link`, then upload a hand-written 5-card XML to notmpc with four community Drive ids and that one; record whether the shop fetches it like the others. Download 100 Drive files in a row and note any throttling. Install Upscayl, time `upscayl-bin` on a 745x1040 scan on this machine, and run three models (`ultrasharp-4x`, `digital-art-4x`, `high-fidelity-4x`) plus one halftone-aware route on three test cards: a 2015-frame scan, a 2003-frame scan with visible rosettes, and a 500 dpi render. Judge the rules text and the copyright line at 800 dpi by eye and record the colour-shift numbers. Print one bleed-padded upscaled Scryfall PNG and one render through notmpc's single-card uploader to compare at the table. These settle the open questions below and fix the default model.
 2. **`mtg art` with Scryfall only, plus the print file and the ledger.** Printings table, scoring, `--style`, `--basics`, `--keep`, tokens from `all_parts`, and the ledger wrapper that locks printed cards and computes the delta. Offline, so it is testable immediately: the delta for `treefolk-quickbeam-v2 --printed-as treefolk-quickbeam` must match `printed/to-print/treefolk-quickbeam-v2.txt` (39 cards) and Vampires must give 5.
 3. **mpcfill source.** Search, metadata, source ranking, token renders, Drive download with cache. `mtg art` now prefers renders.
 4. **Image preparation.** Corner fill, bleed, the plain back, cache, then the upscale step with engine detection, the 4x-then-Lanczos method, the colour-shift check and the Lanczos fallback. Testable on its own against the Treefolk scans.
 5. **Gallery.** Served page with token, Tailscale or LAN bind, phone layout, `POST /choose`, printed-card lock, the upscale compare view and switch.
-6. **`mtg print xml` and `placed`** with preflight and the delta report, one XML per deck into `printed/orders/`. The XML is uploadable by hand from here, so the friend's flow is replaced at this point and the ledger stays current.
+6. **`mtg print xml` and `placed`** with preflight, the Drive upload of prepared images, and the delta report, one XML per deck into `printed/orders/`. The XML is uploadable by hand from here, so the friend's flow is replaced at this point and the ledger stays current.
 7. **`send --to notmpc`.** The Playwright driver: saved login, form fill per XML, one cart, checkout, failure screenshot.
 8. **`mtg ship`, the MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`. From here the whole flow is one sentence to the agent.
 9. **Later:** `send --to mpc` through the desktop tool, then a Playwright driver for MPC; moving `printed.py` into this repo as `mtg printed`; per-card foil; a text-safe composite for upscaled cards; art-only upscaling with a re-rendered frame for cards that only exist as poor scans.
 
 ## Open questions
 
-- **Does notmpc resolve `Local File` entries, or Drive ids only?** Settled by spike 1. If Drive only, Scryfall-sourced cards go into a Drive folder of the user's (one-time OAuth, or a manual drag) or into MPC's path instead.
+- **Does notmpc fetch from a personal Drive the same way it fetches from the community drives?** It resolves Drive ids only, so our own images must live on Drive. Settled by spike 1. If a personal Drive is refused, the fallback is the shop's single-image uploader driven by the same Playwright script, or the MPC path.
 - **How many anonymous Drive downloads before Google throttles?** Settled by spike 1. The desktop tool uses a service-account key; we would rather not ship one.
 - **Which upscale model, and does the whole-card approach hold up on rules text?** Settled by spike 1. If text degrades at 800 dpi even after the downscale, the text-safe composite moves up from "later" into milestone 4.
 - **How fast is `upscayl-bin` here?** Unmeasured. Nothing published for M-series Macs; one pipeline quotes about 40 s per card on unknown hardware. Settled by spike 1, and it decides whether upscales run in the background during the gallery or synchronously at export.
