@@ -28,7 +28,7 @@ Moxfield drops out. mpcfill.com drops out as a website but stays as the image li
 | Checkout | Drive notmpc's form to the pay button, with a saved login so reorders are one click |
 | Home printing | Out of scope |
 | Basic lands | Ask per deck whether to spread copies over several arts; default is spread |
-| Card back | The user chose plain. The two decks already printed each have an illustrated mpcfill back (a different one each), so the default is "match the deck's existing back", plain for a new deck. Confirm. |
+| Card back | Plain solid black for every order. The two printed decks carry illustrated backs, but everything is sleeved, so mismatch does not matter |
 | Tokens | Yes, the tokens the deck makes are added to the order |
 | Reprints | Only cards not yet printed go in a new order. The ledger in the decks repo (`printed/ledger.csv`, `printed/orders/*.xml`, `tools/printed.py`) is the record, and this suite reads and writes it |
 | First order through the suite | The two pending to-print lists: Treefolk v2 (39 cards) and Vampires (5 cards), as one combined order |
@@ -115,7 +115,7 @@ engine = "upscayl"                   # upscayl | none | command
 model = "ultrasharp-4x"
 min_dpi = 600                        # anything below is upscaled
 target_dpi = 800                     # what every image is delivered at
-cardback = { source = "mpcfill", id = "1Y_6xlunE57sI4B3865jpGDL_11FHz5nQ" }   # from the deck's last order XML; { kind = "plain", color = "#000000" } for a new deck
+cardback = { kind = "plain", color = "#000000" }   # generated locally as a PNG with bleed; the same file for every order
 basics = "vary"                                    # the per-deck answer: vary | same
 printed_as = "treefolk-quickbeam"                  # the physical deck this list upgrades, for the ledger
 sources = ["JohnPrime", "MrTeferi", "Chilli_Axe", "WarpDandy", "Nelynes", "SilvanMTG", "PsilosX"]
@@ -256,11 +256,11 @@ uv run mtg print decks/treefolk-quickbeam-v2.txt placed NMPC-12345 --date 2026-1
   <backs>
     <card><id>cards/delver-mid-47-back.png</id><sourceType>Local File</sourceType><slots>17</slots><name>...</name><query>delver of secrets</query></card>
   </backs>
-  <cardback>1Y_6xlunE57sI4B3865jpGDL_11FHz5nQ</cardback>
+  <cardback>cards/back-000000.png</cardback>
 </order>
 ```
 
-The cardback is the deck's existing one, read from its last archived order, so a top-up matches the cards already in the box. A new deck gets a plain back generated locally (solid colour, full bleed, 2176x2960) and referenced as a local file. The first orders were written by the mpcfill site with `<bracket>` and `(S30) Standard Smooth`; the exporter leaves `bracket` out, as the current format does, and writes the stock from the print file. notmpc only prints S33 regardless.
+The cardback is a plain black PNG generated locally (solid colour, full bleed, 2176x2960) and referenced as a local file; the same file goes on every order. The printed decks carry illustrated backs from the first orders, which does not matter because everything is sleeved. The first orders were written by the mpcfill site with `<bracket>` and `(S30) Standard Smooth`; the exporter leaves `bracket` out, as the current format does, and writes the stock from the print file. notmpc only prints S33 regardless.
 
 Slots are 0-indexed in decklist order, copies expanded. mpcfill renders at or above `min_dpi` go in by Drive id, which is what notmpc and the mpcfill desktop tool both resolve. Scryfall images cannot go in by URL, and a render that was upscaled is no longer the Drive file, so both are written as prepared PNGs under `decks/cards/` and referenced as local files. The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
 
@@ -382,5 +382,4 @@ Each one ships on its own and is checked against the real Treefolk deck, as the 
 - **Image terms.** mpcfill's community asks for no commercial use; Scryfall's terms forbid presenting images as counterfeits. A proxy deck for the user's own casual table is what both communities exist for. The tools should not be pointed at resale, and the README should say so in one line.
 - **Rulings on proxies at the user's tables** are the user's business, not the tool's; nothing here changes `mtg check`.
 - **Does notmpc's site tolerate a scripted browser?** Playwright with a persistent profile looks like a normal Chrome to WooCommerce, and the user is logged in as themselves. If the shop adds a bot check, the driver stops at the form and the manual upload remains. Confirmed only by trying, in spike 1.
-- **Card back for top-ups.** The user chose a plain back, but the two printed decks each carry an illustrated mpcfill back, and they differ from each other. A top-up with a plain back would stand out in an unsleeved shuffle. The spec defaults to matching each deck's existing back; the user should confirm or override.
 - **Assumed, not yet confirmed:** this agent builds it, and it is for the user alone.
