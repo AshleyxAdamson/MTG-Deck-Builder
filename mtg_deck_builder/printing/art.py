@@ -162,6 +162,9 @@ def choose_art(db: sqlite3.Connection, decklist: Path, *, style: str = "fullart"
         entries.append(entry)
 
     for token in token_list:
+        if previous and _kept(previous, token["name"]):
+            entries.append(printfile.card_entry(previous, token["name"]))
+            continue
         ranked = candidates_for(db, token["token"], None, pf, token_renders)
         ranked = ranked or printings.rank(printings.scryfall_candidates(db, token["oracle_id"], allow_lowres=allow_lowres), style)
         entry = _entry_from(ranked[0] if ranked else None, token["name"], token["copies"], kind="token")
@@ -218,8 +221,8 @@ def _spread(copies: int, ids: list[str]) -> dict[str, int]:
 def summary(pf: dict) -> dict:
     """Counts the agent reads back to the user."""
     cards_ = [c for c in pf["cards"] if c.get("kind", "card") == "card"]
-    toks = [c for c in pf["cards"] if c.get("kind") == "token"]
-    new = [c for c in pf["cards"] if not c.get("printed")]
+    toks = [c for c in pf["cards"] if c.get("kind") == "token" and not c.get("dropped")]
+    new = [c for c in pf["cards"] if not c.get("printed") and not c.get("dropped")]
     min_dpi = pf.get("upscale", {}).get("min_dpi", 600)
     return {
         "cards": sum(c["copies"] for c in cards_),
@@ -260,8 +263,8 @@ def gallery_payload(db: sqlite3.Connection, decklist: Path, pf: dict, order: dic
             pass
     cards_out = []
     for entry in pf["cards"]:
-        if entry.get("printed"):
-            # Already in the box: nothing to choose. (A reprint goes through set_art or --full.)
+        if entry.get("printed") or entry.get("dropped"):
+            # Already in the box, or left out on purpose: nothing to choose.
             continue
         is_token = entry.get("kind") == "token"
         if is_token:
@@ -325,10 +328,13 @@ def set_art(decklist: Path, name: str, source: str | None, ident: str | None, *,
         if entry.get("kind") != "token":
             raise CardDataError(f"{name} is a card: its copies come from the decklist, not the print file.")
         if drop:
-            pf["cards"].remove(entry)
+            # Kept in the file, flagged, so `mtg art --keep` does not bring it back.
+            entry["dropped"] = True
+            entry["chosen_by"] = "user"
             printfile.save(pf, path)
             return {"name": name, "dropped": True}
         entry["copies"] = max(1, int(copies))
+        entry.pop("dropped", None)
         entry["chosen_by"] = "user"
     if source and ident:
         entry.update({"source": source, "id": ident, "chosen_by": "user"})

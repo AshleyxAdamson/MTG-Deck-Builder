@@ -33,7 +33,7 @@ def plan(db: sqlite3.Connection, decklist: Path, pf: dict, *, full: bool = False
     stale = [n for n in counts if n not in entries]
     if stale:
         problems.append("The print file is older than the decklist; run mtg art --keep. Missing: " + "; ".join(stale))
-    tokens = Counter({c["name"]: c["copies"] for c in pf["cards"] if c.get("kind") == "token"})
+    tokens = Counter({c["name"]: c["copies"] for c in pf["cards"] if c.get("kind") == "token" and not c.get("dropped")})
     wanted = counts + tokens
     printed_as = pf.get("printed_as")
     if full or not ledger.available(decklist):
@@ -44,7 +44,7 @@ def plan(db: sqlite3.Connection, decklist: Path, pf: dict, *, full: bool = False
     slots: list[dict] = []
     for name, copies in delta["to_print"].items():
         entry = entries.get(name)
-        if entry is None:
+        if entry is None or entry.get("dropped"):
             continue
         if entry.get("status") == "missing":
             problems.append(f"{name}: no printable image anywhere yet")

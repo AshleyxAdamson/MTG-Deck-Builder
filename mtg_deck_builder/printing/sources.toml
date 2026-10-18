@@ -1,2 +1,4 @@
-# mpcfill community sources, best first. The order sets result priority.
-sources = ["JohnPrime", "MrTeferi", "Chilli_Axe", "WarpDandy", "Nelynes", "SilvanMTG", "PsilosX", "Trix Are For Scoot"]
+# Default mpcfill sources, in priority order. Measured on 2026-10-18 over 151 cards from two decks:
+# WillieTanner covered 146 (all 800+ dpi, full-art style), JohnPrime 50 (all borderless), CompC 122 and
+# Hathwellcrisping 107 (broad, plain frames). See docs/research/proxy-printing.md.
+sources = ["JohnPrime", "WillieTanner", "MrTeferi", "PsilosX", "Chilli_Axe", "WarpDandy", "Nelynes", "SilvanMTG", "Trix Are For Scoot", "CompC", "Hathwellcrisping"]
