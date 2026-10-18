@@ -25,7 +25,9 @@ DEFAULTS = {
     # Styles never chosen or shown. Lands keep textless, minimalist and full-art anyway (see printings.LAND_OK).
     # novelty-frame: unlabelled renders from the drives that make non-standard frames (pixel fonts, parchment,
     # stained glass). Minimalist, custom frames, altered art and odd borders are allowed.
-    "styles": {"exclude": ["novelty-frame", "sketch", "pixel", "textless", "ai-art", "nsfw"], "languages": ["EN"]},
+    # prefer: official Japanese alternate art (English text) ranks first.
+    "styles": {"exclude": ["novelty-frame", "sketch", "pixel", "textless", "nsfw"], "languages": ["EN"],
+               "prefer": ["japanese"]},
     "hidden": [],   # render ids or source names the user hid in the gallery
 }
 

@@ -45,6 +45,8 @@ TAG_STYLES = {
     "pixel art": "pixel", "pop-out art": "pop-out", "sketch art": "sketch", "upscaled scan": "upscaled-scan",
     "textless": "textless", "secret lair": "secret-lair", "zeta": "textless", "non-black border": "non-black-border",
     "alternate name": "alt-name", "nsfw": "nsfw", "eternal night card": "altered",
+    # Official Japanese alternate art (Mystical Archive, War of the Spark, Secret Lair), English text.
+    "japan showcase": "japanese", "japanese mystical archive": "japanese",
 }
 NAME_STYLES = {
     "borderless": "borderless", "extended": "extended", "ext": "extended", "showcase": "showcase",
@@ -53,7 +55,10 @@ NAME_STYLES = {
     "retro": "retro", "ancient": "retro", "classic": "retro", "modern": "modern", "promo": "promo",
     "pop-out": "pop-out", "popout": "pop-out", "pixel": "pixel", "ai": "ai-art", "storybook": "showcase",
     "book": "showcase", "nsfw": "nsfw", "upscaled": "upscaled-scan", "secret lair": "secret-lair", "sld": "secret-lair",
+    "jp": "japanese", "japanese": "japanese", "japan": "japanese", "jpn": "japanese",
 }
+# Styles the user prefers get this many extra points each (the print file's styles.prefer list).
+PREFER_POINTS = 4
 # A render with any of these does not look like an ordinary Magic card: no cost or rules box.
 NON_STANDARD = {"minimalist", "textless", "custom-frame", "altered", "sketch", "pop-out", "pixel", "novelty-frame"}
 # Drives whose whole point is non-standard frames (pixel fonts, parchment, stained glass...). A render
@@ -233,9 +238,11 @@ def _artist_from_label(label: str) -> str | None:
     return " ".join(words) if 1 < len(words) <= 4 else None
 
 
-def score(candidate: dict, style: str) -> float:
+def score(candidate: dict, style: str, prefer: set[str] | None = None) -> float:
     w = WEIGHTS[style]
     points = 0.0
+    if prefer:
+        points += PREFER_POINTS * len(set(candidate.get("styles") or ()) & prefer)
     if candidate["source"] == "mpcfill":
         points += w["fancy_render"] if candidate["fancy"] else w["render"]
     else:
@@ -262,11 +269,12 @@ def score(candidate: dict, style: str) -> float:
 
 def rank(candidates: list[dict], style: str, *, artist: str | None = None, set_code: str | None = None,
          hide_ub: bool = False, exclude_styles: set[str] | None = None, land: bool = False,
-         languages: set[str] | None = None, hidden: set[str] | None = None) -> list[dict]:
+         languages: set[str] | None = None, hidden: set[str] | None = None,
+         prefer: set[str] | None = None) -> list[dict]:
     """Best first. Pins (artist, set) go to the top; ties break on dpi, then newest.
 
     Candidates carrying an excluded style, in another language, or hidden by the user are dropped;
-    a land keeps the styles in LAND_OK.
+    a land keeps the styles in LAND_OK. Preferred styles score extra.
     """
     excluded = set(exclude_styles or ()) - (LAND_OK if land else set())
     languages = {lang.upper() for lang in languages} if languages else None
@@ -275,14 +283,14 @@ def rank(candidates: list[dict], style: str, *, artist: str | None = None, set_c
     def key(c: dict):
         pinned = (artist and (c.get("artist") or "").lower() == artist.lower()) or \
                  (set_code and (c.get("set") or "").lower() == set_code.lower())
-        return (not pinned, -score(c, style), -c.get("dpi", 0), c.get("released_at") or "")
+        return (not pinned, -score(c, style, prefer), -c.get("dpi", 0), c.get("released_at") or "")
     kept = [c for c in candidates if not (hide_ub and c.get("universes_beyond"))
             and not (set(c.get("styles") or ()) & excluded)
             and not (languages and c.get("language") and c["language"] not in languages)
             and c["id"] not in hidden and (c.get("render_source") or "") not in hidden]
     ordered = sorted(kept, key=key)
     for position, c in enumerate(ordered):
-        c["score"] = score(c, style)
+        c["score"] = score(c, style, prefer)
         c["rank"] = position
         c["standard"] = is_standard(set(c.get("styles") or ()), land)
     return ordered

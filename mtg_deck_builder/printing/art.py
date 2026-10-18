@@ -73,7 +73,8 @@ def candidates_for(db: sqlite3.Connection, name: str, row: sqlite3.Row | None, s
                           set_code=pins.get("set") or settings.get("set"),
                           hide_ub=settings.get("hide_universes_beyond", False),
                           exclude_styles=set(styles_cfg.get("exclude") or ()), land=land,
-                          languages=set(styles_cfg.get("languages") or ()), hidden=set(settings.get("hidden") or ()))
+                          languages=set(styles_cfg.get("languages") or ()), hidden=set(settings.get("hidden") or ()),
+                          prefer=set(styles_cfg.get("prefer") or ()))
 
 
 def hide_render(decklist: Path, ident: str | None, source_name: str | None = None) -> dict:
