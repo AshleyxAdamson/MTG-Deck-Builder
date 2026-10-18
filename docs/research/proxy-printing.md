@@ -12,6 +12,7 @@ The flow being replaced: Moxfield list → paste into mpcfill.com and pick art p
 - **Coverage is good but not complete.** For the 63 unique cards of the Treefolk deck, mpcfill had a render for 49 and Scryfall had a borderless, full-art, showcase or extended-art printing for 27. Thirteen old, obscure Treefolk exist only in a plain frame anywhere. The commander, a new card, had no printable image at all yet.
 - **The XML format is documented and simple** (one `<order>`, cards with a Drive id and 0-indexed slots). The repo can write it without the mpcfill editor.
 - **No print shop has an API.** notmpc.com accepts the XML through a web form only; the friend's flow is the only confirmation that it resolves the Drive ids itself. MakePlayingCards is driven by the `mpc-autofill` desktop tool, which needs a human to log in. Home printing is a PDF plus `lpr`; this Mac has no printer configured today.
+- **Image quality is uneven, and a local upscaler is practical.** Renders in the Treefolk pool run from 500 to 1300 dpi; Scryfall scans are 300 dpi with halftone; 6,726 printings are flagged `lowres`. `upscayl-bin`, the maintained Real-ESRGAN ncnn runner inside the Upscayl app, installs with one Homebrew cask, runs on Apple Silicon, and is already driven headlessly by other proxy pipelines. Its known weak spots are small text and halftone, so the spec runs it at 4x then downscales to 800 dpi, checks for colour shift, and shows a before/after in the gallery.
 
 ## What was checked
 
@@ -42,6 +43,17 @@ The flow being replaced: Moxfield list → paste into mpcfill.com and pick art p
 | This Mac has no printer: `lpstat -p -d` says "No destinations added"; CUPS 2.3.4 is present | Ran. |
 | Pillow and reportlab are not installed in the project's environment | Ran: `uv run python -c "import PIL"` fails. |
 | The MCP server registered on this machine runs from `~/Documents/Code/10-19 Projects/11 MTG-Deck-Builder`, which is at commit `6dfd605`, three merges behind `main`; the data (`data/`) lives there too | Ran: the Claude Code MCP registration and the log of that checkout. |
+| Render dpi for the Treefolk deck's 682 mpcfill hits: 6 at 500 to 599, 17 at 600 to 699, 319 at 800 to 899, 340 at 1200 to 1299; the 49 default picks are all 800 or above; 583 jpg, 98 png; sizes 0.1 to 21.9 MB, median 3.2 MB | Ran: `/2/cards/` for every id the search returned. |
+| No upscaler, PyTorch or MLX is installed here; the machine is an Apple M5 Max with 64 GB and Metal 4 | Ran: `which`, `python3 -c "import torch"`, `sysctl`, `system_profiler`. |
+| The `upscayl` Homebrew cask exists (2.15.0, arm64, macOS 12 or later) and its engine `upscayl-bin` had a macOS release on 2025-12-07 | Ran: `brew info --cask upscayl` and the upscayl-ncnn releases API. |
+| The original `realesrgan-ncnn-vulkan` macOS binary was last released 2022-04-24 (v0.2.5.0, 51.8 MB, universal x86_64 + arm64) and has an open crash report on macOS Ventura and later | Ran: the Real-ESRGAN releases API; the research agent inspected the zip with `lipo`. Read: Real-ESRGAN-ncnn-vulkan issues 48 and 13. |
+| `upscayl-bin` lives at `/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin` with models in `../models`; it takes the Real-ESRGAN flags (`-i -o -m -n -s -t -f -x`) plus `-w` width and `-c` compression; bundled models are `upscayl-standard-4x`, `upscayl-lite-4x`, `high-fidelity-4x`, `remacri-4x`, `ultramix-balanced-4x`, `ultrasharp-4x`, `digital-art-4x` | Read: the Upscayl repo (`electron/utils/get-arguments.ts`, `resources/models/`) and proxdex's docs, which auto-detect that path. Not run. |
+| The Real-ESRGAN runner implements `-s 2` as a 4x run plus a resize; whole-image tiling (`-t 0`) avoids seams | Read: Upscayl passes `-s` only when it differs from the model's native 4x; the Real-ESRGAN README warns about tile seams. Unconfirmed by running. |
+| Real-ESRGAN models blur or mutate small text and amplify halftone dots on scans | Read: Real-ESRGAN issues 78, 456 and 320. |
+| Other proxy pipelines upscale this way: proxdex runs `upscayl-bin` per card (default `digital-art-4x`, optional double pass); Proxy Scaler runs UltraSharpV2 at 4x then Lanczos-downscales to 600, 800 or 1200 dpi and notes AnimeSharp is "strong on text"; chelcomp/print-mtg-proxy-cards runs Real-ESRGAN 2x on Scryfall images and reports colour shifts; Proxyshop upscales only the art and re-renders the frame at 1200 dpi, noting most printers stop at 800 | Read: each project's README or site. |
+| A Magic-specific fine-tune exists: `rullaf/RealESRGAN_MtG` on Hugging Face, BSD-3, x2, trained with halftone removal for Scryfall art crops, shipped as a `.pth` | Read: the model card. Not run. |
+| Model licences: UltraSharp, Remacri and AnimeSharp are CC-BY-NC-SA; Nomos8kSC CC-BY-4.0; NMKD Siax WTFPL; Upscayl itself AGPL-3.0 | Read: openmodeldb.info and the Upscayl repo. |
+| Speed of `upscayl-bin` on an M-series Mac | Not measured. The only public figure is about 40 s per card in proxdex's UI copy, hardware unstated. |
 
 ## Coverage of a real deck
 
@@ -82,6 +94,24 @@ Use mpcfill first, Scryfall as the fallback and as the "show me the real printin
 | Time | 1 to 2 days processing, 3 to 5 in transit | Weeks | Minutes |
 
 notmpc stays the default because it is what already works for the user's circle and ships from the US. The home printer is the only target that can be fully automated, so it is worth building for test prints and single replacements.
+
+### Upscalers
+
+The question is which images need help and what runs on this Mac without a Python ML stack.
+
+**Who needs it.** In the Treefolk pool, every default render pick is 800 dpi or better, so renders rarely need upscaling; the 23 renders under 700 dpi only matter when the user picks one by hand. The Scryfall path is the real customer: every scan is 300 dpi at trim with halftone rosettes, and the Scryfall path is what the thirteen plain-only Treefolk and every new card take. `lowres` (6,726) and `placeholder` (575) printings are below what any model can rescue.
+
+| | `upscayl-bin` (Upscayl) | `realesrgan-ncnn-vulkan` (original) | `spandrel` + PyTorch on Metal | chaiNNer | Apple first-party |
+|---|---|---|---|---|---|
+| Install | `brew install --cask upscayl` | 2022 zip from GitHub | pip, several hundred MB to GBs | DMG, heavy | nothing to install |
+| Apple Silicon | Yes, via MoltenVK, maintained (Dec 2025 release) | Universal binary, but an open crash report on Ventura and later | Yes; MPS speed and operator coverage unconfirmed | Yes | `sips` resamples only; VideoToolbox super-resolution is for video frames on macOS 26 and needs a Swift wrapper |
+| Headless | Yes, plain CLI; proxdex does it | Yes | Yes, with your own tiling code | Experimental CLI, documented as buggy | No |
+| Models | 7 bundled ESRGAN-style 4x models; custom ncnn models drop in | 2 photo + 3 anime models | Any `.pth` or `.safetensors` from OpenModelDB, including the Magic fine-tune | Any | None |
+| Verdict | Default engine | Avoid | The `command` engine for experiments and the Magic fine-tune | Prototype chains only | No |
+
+**What other proxy pipelines do.** All four found upscale after choosing the image and before adding bleed. Two run the model at its native 4x and downscale to the print dpi with Lanczos. One upscales only the art and re-renders the frame from templates, which sidesteps the text problem at the cost of a frame renderer this repo does not have. One reports colour shifts after Real-ESRGAN, so the spec checks for them.
+
+**Known failure modes**, all from upstream issues, none yet reproduced here: small text blurs or mutates; halftone rosettes on scans get amplified; tiling produces seams unless the whole image is processed at once. The spike in the spec exercises each on real cards before a default model is fixed.
 
 ### Things that could break
 

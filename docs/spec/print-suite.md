@@ -70,6 +70,12 @@ deck = "treefolk-quickbeam.txt"
 style = "fullart"
 stock = "(S33) Superior Smooth"      # notmpc only offers S33; MPC defaults to S30
 foil = false
+
+[upscale]
+engine = "upscayl"                   # upscayl | none | command
+model = "ultrasharp-4x"
+min_dpi = 600                        # anything below is upscaled
+target_dpi = 800                     # what every image is delivered at
 cardback = { source = "mpcfill", id = "16g2UamJ2jzwNHovLesvsinvd6_qPkZfy", name = "MTG back (black)" }
 sources = ["JohnPrime", "MrTeferi", "Chilli_Axe", "WarpDandy", "Nelynes", "SilvanMTG", "PsilosX"]
 
@@ -90,6 +96,8 @@ id = "a3b1...-scryfall-id"
 label = "ZNR 280, Adam Paquette (full art)"
 dpi = 300
 chosen_by = "user"
+upscale = "auto"                                 # auto | never | always; auto means "when under min_dpi"
+upscaled_from = 300                              # written by the export: this one went 300 → 800 with ultrasharp-4x
 slots = { "a3b1..." = 20, "9f0c..." = 18 }        # only when copies are spread over several arts
 
 [[cards]]
@@ -116,7 +124,9 @@ uv run mtg gallery decks/treefolk-quickbeam.txt           # writes decks/treefol
 uv run mtg gallery decks/treefolk-quickbeam.txt --serve   # same, plus a local server so clicks save themselves
 ```
 
-One HTML file, no build step, no framework, written from a template string in `printing/gallery.py`. One row per deck entry, grouped by role when the notes name roles, otherwise by type. Each row shows the chosen image large on the left and the alternatives as a horizontal strip of thumbnails on the right, with a caption per thumbnail (source, set or render name, artist, dpi, a "render" or "scan" badge, and a red "low res" badge when under 600 dpi). Clicking a thumbnail makes it the chosen one. Thumbnails come straight from Drive (`https://drive.google.com/thumbnail?sz=w400-h400&id=<id>`) and Scryfall (`image_normal`), so the page is light and the images are never stored before the user chooses. A filter bar at the top: style (same four as `--style`), renders only, scans only, one artist, hide Universes Beyond. A header shows the count of chosen renders, chosen scans, missing cards, and the estimated order size against the MPC brackets (18, 36, 55, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 396, 504, 612).
+One HTML file, no build step, no framework, written from a template string in `printing/gallery.py`. One row per deck entry, grouped by role when the notes name roles, otherwise by type. Each row shows the chosen image large on the left and the alternatives as a horizontal strip of thumbnails on the right, with a caption per thumbnail (source, set or render name, artist, dpi, a "render" or "scan" badge, and a red "low res" badge when under 600 dpi). Clicking a thumbnail makes it the chosen one. Thumbnails come straight from Drive (`https://drive.google.com/thumbnail?sz=w400-h400&id=<id>`) and Scryfall (`image_normal`), so the page is light and the images are never stored before the user chooses. A filter bar at the top: style (same four as `--style`), renders only, scans only, one artist, hide Universes Beyond. A header shows the count of chosen renders, chosen scans, cards that will be upscaled, missing cards, and the estimated order size against the MPC brackets (18, 36, 55, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 396, 504, 612).
+
+A card that will be upscaled gets an "upscale" badge and, once the prepared image exists, a compare view: original and upscaled side by side with a zoom on the rules text, and a switch for `auto | never | always` that writes to the print file like a thumbnail click does.
 
 **Getting clicks back to the file** has two modes, and the page works the same in both:
 
@@ -136,7 +146,7 @@ uv run mtg print decks/treefolk-quickbeam.txt send --to notmpc
 uv run mtg print decks/treefolk-quickbeam.txt send --to printer [--printer NAME]
 ```
 
-**Preflight** runs first for every target: the print file exists, every card in the decklist has an entry (the decklist is the source of truth; a stale print file fails with the diff), no entry is `missing`, every image resolves (HEAD on Drive and Scryfall, cached for a day), and the total slot count is 100 or whatever the list sums to. Problems are listed all at once, the way `mtg check` does.
+**Preflight** runs first for every target: the print file exists, every card in the decklist has an entry (the decklist is the source of truth; a stale print file fails with the diff), no entry is `missing`, every image resolves (HEAD on Drive and Scryfall, cached for a day), every image is prepared (filled, upscaled where needed, bleed added) and passed its colour-shift check, and the total slot count is 100 or whatever the list sums to. Problems are listed all at once, the way `mtg check` does, followed by the upscale report.
 
 **`xml`** writes the MPC Autofill order:
 
@@ -158,13 +168,46 @@ uv run mtg print decks/treefolk-quickbeam.txt send --to printer [--printer NAME]
 </order>
 ```
 
-Slots are 0-indexed in decklist order, copies expanded. mpcfill renders go in by Drive id, which is what notmpc and the mpcfill desktop tool both resolve. Scryfall images cannot go in by URL, so the exporter downloads the PNG to `decks/cards/`, adds the bleed (see below), and references it as a local file. The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
+Slots are 0-indexed in decklist order, copies expanded. mpcfill renders at or above `min_dpi` go in by Drive id, which is what notmpc and the mpcfill desktop tool both resolve. Scryfall images cannot go in by URL, and a render that was upscaled is no longer the Drive file, so both are written as prepared PNGs under `decks/cards/` and referenced as local files. The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
 
 Open question for a spike: whether notmpc's uploader accepts `Local File` entries, or only Drive ids. If not, the fallback is to upload the Scryfall-sourced cards to a Drive folder of the user's own, or to put them in the deck as separate single-image uploads. The spike is a 5-card XML with one Scryfall card, uploaded by hand.
 
-**Bleed for Scryfall images** (`printing/bleed.py`, needs Pillow, the one new dependency): take the 745x1040 RGBA PNG, fill the transparent corners with the border colour sampled at the edge midpoint, pad 36 px on each side by repeating the edge row and column, and resize to 816x1110. The result is the community standard 63x88 mm plus 1/8 inch bleed at 300 dpi, above notmpc's 447x597 minimum and matching its 822x1122 template within six pixels. Renders are passed through untouched. Nothing is sharpened, recoloured or cropped.
+**Image preparation** (`printing/prepare.py`, needs Pillow, the one new Python dependency) runs on every chosen image before it reaches an export, in this order: fill, upscale, bleed. Each output is cached under `data/art/prepared/<source>/<id>-<dpi>-<model>.png`, so a second export is instant.
 
-**`pdf`** lays out fronts for home printing: US Letter (A4 with `--paper a4`), nine cards per page at exactly 63x88 mm trimmed (bleed removed), 2 mm gutters, hairline cut marks in the gutters and margins, page numbers, and the deck name in the footer. Backs are a second PDF, mirrored per page, written only with `--backs`. Pillow writes multi-page PDFs on its own, so no reportlab. All images are downloaded first into `data/art/<source>/<id>.<ext>` and reused by later runs.
+1. **Fill.** Scryfall PNGs are 745x1040 RGBA with transparent rounded corners; the corners are filled with the border colour sampled at the edge midpoint, because transparent pixels confuse upscalers and print as white. Renders already have square corners.
+2. **Upscale** when the image's effective dpi is below the threshold. See the next section.
+3. **Bleed.** Pad 36 px per side at 300 dpi (96 px at 800) by repeating the edge row and column, then resize to the target with bleed: 816x1110 at 300 dpi, 2176x2960 at 800. That is the community standard 63x88 mm plus 1/8 inch bleed, above notmpc's 447x597 minimum and within six pixels of its 822x1122 template. Renders arrive with bleed and skip this step. Bleed comes last so the upscaler never invents detail in a region the cutter removes.
+
+Nothing is sharpened, recoloured or cropped.
+
+### Upscaling low-quality images (`printing/upscale.py`)
+
+Image quality is uneven. Scryfall scans are 745x1040 (300 dpi at trim) and carry the halftone rosettes of a printed card; 6,726 Scryfall printings are flagged `lowres` and 575 `placeholder`; community renders run from 500 to 1300 dpi (in the Treefolk deck's pool of 682 renders: 6 below 600 dpi, 17 at 600 to 699, 319 at 800, 340 at 1200). The thirteen Treefolk with no fancy printing and every brand-new card come through the Scryfall path, so the cards most likely to need help are exactly the ones with no alternative.
+
+**When.** Effective dpi is `10 * round(height_px * 300 / 1110 / 10)` for an image with bleed (the mpcfill convention) and `height_px * 300 / 1040` for a trimmed Scryfall image. Anything under `min_dpi` (default 600) is upscaled to `target_dpi` (default 800, the most a card press prints at and the mpcfill desktop tool's own downscale target). Per card, `upscale = "auto" | "never" | "always"` in the print file overrides the threshold; the gallery exposes this as a switch.
+
+**Engine.** `upscayl-bin`, the maintained fork of the Real-ESRGAN ncnn Vulkan runner that ships inside Upscayl (`brew install --cask upscayl`, then `/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin` with models in `../models`). It runs on Apple Silicon through MoltenVK, needs no Python ML stack, and is what other proxy pipelines (proxdex) already drive headlessly. The original `realesrgan-ncnn-vulkan` binary was last built in April 2022 and has an open crash report on macOS Ventura and later, so it is not the default. The engine is configured, not hard-coded: `engine = "upscayl" | "none" | "command"` with a `command` template (`{input} {output} {scale} {model}`), so a PyTorch model through `spandrel` on the Metal backend, or a future Core ML model, can drop in. With `engine = "none"` or the binary missing, the step falls back to Lanczos resampling and says so in the preflight report.
+
+```bash
+upscayl-bin -i in.png -o out.png -m /Applications/Upscayl.app/Contents/Resources/models -n ultrasharp-4x -f png -t 0
+```
+
+**Method.** Run the model at its native 4x (a 745x1040 scan becomes 2980x4160, about 1200 dpi), then Lanczos-downscale to `target_dpi`. Running native and shrinking beats asking the runner for 2x, which it implements as 4x plus a resize anyway, and the downscale takes the edge off GAN texture. Tile size 0 (whole image) avoids seams; the M5 Max's 64 GB has room. Default model `ultrasharp-4x`; `digital-art-4x` and `high-fidelity-4x` ship with Upscayl too, and the model is a print-file setting so a spike can change the default without code.
+
+**Known weaknesses, and what the pipeline does about them.**
+
+- *Rules text and the copyright line.* Real-ESRGAN models blur or mutate small text; the maintainer says text needs a fine-tuned model. Mitigation: the downscale to 800 dpi hides most of it, the gallery shows an upscaled card beside its original with a zoom on the text box, and `upscale = "never"` is one click. A later option is a text-safe composite: Lanczos for the text box, the model for the rest. Models blended with text training, such as 4x-AnimeSharp, are candidates for the spike.
+- *Halftone.* Models amplify the rosette pattern of a scan. Mitigation candidates for the spike: a 1x descreen model run first (1x-Bendel-Halftone), or the Magic-specific fine-tune `rullaf/RealESRGAN_MtG` (BSD-3, x2, trained with halftone removal, built for Scryfall art crops; a `.pth`, so it needs conversion to ncnn or the `command` engine). The spike compares both against plain `ultrasharp-4x` on a 2003-frame scan.
+- *Colour shift.* One community pipeline reports colour shifts after Real-ESRGAN. Check: the prepared image is downscaled back to the input size and compared with the original (per-channel mean difference and PSNR, both Pillow-only); a shift beyond a small tolerance fails preflight for that card with the numbers.
+- *Lowres and placeholder scans.* A 4x model cannot recover a 488x680 placeholder. These stay `missing` for printing until the user says `--allow-lowres`, and the gallery marks them.
+
+**Speed.** Unmeasured on this machine. The one public figure is about 40 s per card for one pipeline's Upscayl stage on unspecified hardware. A deck typically needs 10 to 20 upscales, so the export runs them in the background while the gallery is open and reports progress; results are cached, so re-exports do no work.
+
+**Reporting.** Preflight lists every upscaled card as `name: 300 dpi → 800 dpi, ultrasharp-4x`, every card that fell back to Lanczos, and every colour-shift failure. The print file records `upscaled_from = 300` and `model` on the card so the gallery and later runs know.
+
+**Licences.** Upscayl is AGPL, which is fine for calling its binary. Its bundled UltraSharp and Remacri models are CC-BY-NC-SA; the MtG fine-tune is BSD-3. Non-commercial terms match the no-resale stance already in this spec.
+
+**`pdf`** lays out fronts for home printing: US Letter (A4 with `--paper a4`), nine cards per page at exactly 63x88 mm trimmed (bleed removed), 2 mm gutters, hairline cut marks in the gutters and margins, page numbers, and the deck name in the footer. Backs are a second PDF, mirrored per page, written only with `--backs`. Pillow writes multi-page PDFs on its own, so no reportlab. Images go through the same preparation as the XML path, so a home print gets the upscales too; raw downloads live in `data/art/<source>/<id>.<ext>` and prepared images beside them, both reused by later runs.
 
 **`send --to notmpc`** writes the XML, opens `https://notmpc.com/custom-game-cards/` in the browser, and prints the three things the user has to do there: choose black border and 63x88 mm, upload the XML, pay. It also prints the estimated price from a small table in `printing/shops.toml` that the user maintains (the shop's own price table is JavaScript and not scrapeable). That is as far as automation goes without an API.
 
@@ -181,14 +224,15 @@ MCP tools in `server.py`, each a thin wrapper like `validate_deck`, so they work
 | `choose_art(decklist, style, basics, sources?, pins?)` | Step 1. Returns the per-card choices with labels and the list of missing cards. |
 | `art_gallery(decklist, serve=true)` | Step 2. Returns the URL (served) or the file path, and the port to stop. |
 | `set_art(decklist, name, source, id)` | One card by hand, for "use the John Avon one for the Forests". Searches both sources for the name when `id` is omitted and returns the candidates instead. |
-| `print_deck(decklist, target, options)` | Step 3. Returns the output path, the preflight report, and for shops the manual steps left. |
+| `print_deck(decklist, target, options)` | Step 3. Returns the output path, the preflight report including which cards were upscaled and from what dpi, and for shops the manual steps left. |
+| `prepare_images(decklist, only?)` | Runs fill, upscale and bleed ahead of time, in the background, so the gallery's compare view and the export are ready. Returns progress and the per-card result. |
 
 A new skill, `.claude/skills/print-deck/SKILL.md`, walks the agent through: confirm the decklist passes `mtg check`; run `choose_art` with the style the user asked for and read back the missing list and anything chosen below 600 dpi; open the gallery and wait for "done"; run the preflight; say the price estimate and the manual steps; hand over the XML or PDF path. The `commander-deck` skill's last step gains one line pointing here.
 
 The conversation this spec is for:
 
 > **User:** print the treefolk deck, full art where you can
-> **Agent:** runs `choose_art`; "63 cards. 49 are community renders at 800 to 1200 dpi, 13 only exist in the plain frame, and Quickbeam has no high-resolution image yet. Opening the gallery at http://127.0.0.1:51234 so you can swap any of them. Tell me when you're done."
+> **Agent:** runs `choose_art`; "63 cards. 49 are community renders at 800 to 1200 dpi, 13 only exist in the plain frame as 300 dpi scans and will be upscaled to 800, and Quickbeam has no high-resolution image yet. Opening the gallery at http://127.0.0.1:51234 so you can swap any of them; the upscales are running in the background and will show up there for comparison. Tell me when you're done."
 > **User:** done, send to notmpc
 > **Agent:** preflight passes except Quickbeam; "Quickbeam is still missing. Print the deck without it and add it later, or use the low-res scan?" → writes the XML → opens notmpc → "Order is 99 cards on S33, about $34. Pick black border and 63x88 mm, upload decks/treefolk-quickbeam.xml, pay."
 
@@ -200,32 +244,36 @@ mtg_deck_builder/printing/
   printings.py   # Scryfall printings table, scoring, choose()
   mpcfill.py     # /2/editorSearch, /2/cards, /2/sources, /2/cardbacks, Drive download, cache
   printfile.py   # read/write <name>.print.toml, --keep, --apply
-  gallery.py     # HTML template, http.server, POST /choose
-  bleed.py       # Pillow: bleed + corners for Scryfall PNGs
+  gallery.py     # HTML template, http.server, POST /choose and POST /upscale
+  prepare.py     # Pillow: corner fill, bleed, colour-shift check, prepared-image cache
+  upscale.py     # effective dpi, engine detection (upscayl-bin, command, none), 4x run + Lanczos downscale
   export.py      # xml, pdf, preflight
   send.py        # notmpc, mpc, printer
   sources.toml   # default mpcfill source order
 ```
 
-`cards.py` gains the `printings` table in `build_index` and a `printings_of(db, oracle_id)` query. `cli.py` gains `art`, `gallery`, `print`. `pyproject.toml` gains `pillow`. `README.md` gains a "Printing a deck" section and the data table gains `data/art/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `.xml`, `.pdf` and `cards/` land; add `/data/art/`.
+`cards.py` gains the `printings` table in `build_index` and a `printings_of(db, oracle_id)` query. `cli.py` gains `art`, `gallery`, `print` and `print ... prepare`. `pyproject.toml` gains `pillow`. Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `.xml`, `.pdf` and `cards/` land; add `/data/art/`.
 
 ## Milestones
 
 Each one ships on its own and is checked against the real Treefolk deck, as the repo has no test suite.
 
-1. **Spikes (half a day).** Upload a hand-written 5-card XML to notmpc with four Drive ids and one `Local File`; record what the uploader does with each. Download 100 Drive files in a row and note any throttling. Print one bleed-padded Scryfall PNG and one render through notmpc's single-card uploader to compare at the table. These settle the two open questions below.
+1. **Spikes (one day).** Upload a hand-written 5-card XML to notmpc with four Drive ids and one `Local File`; record what the uploader does with each. Download 100 Drive files in a row and note any throttling. Install Upscayl, time `upscayl-bin` on a 745x1040 scan on this machine, and run three models (`ultrasharp-4x`, `digital-art-4x`, `high-fidelity-4x`) plus one halftone-aware route on three test cards: a 2015-frame scan, a 2003-frame scan with visible rosettes, and a 500 dpi render. Judge the rules text and the copyright line at 800 dpi by eye and record the colour-shift numbers. Print one bleed-padded upscaled Scryfall PNG and one render through notmpc's single-card uploader to compare at the table. These settle the open questions below and fix the default model.
 2. **`mtg art` with Scryfall only, plus the print file.** Printings table, scoring, `--style`, `--basics`, `--keep`. Offline, so it is testable immediately.
 3. **mpcfill source.** Search, metadata, source ranking, cardbacks, Drive download with cache. `mtg art` now prefers renders.
-4. **Gallery.** Static page first, then `--serve` and `POST /choose`.
-5. **`mtg print xml` and `send --to notmpc`**, with bleed and preflight. This is the point where the friend's flow is fully replaced.
-6. **`mtg print pdf` and `send --to printer`.**
-7. **MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`.
-8. **Later:** `send --to mpc` through the desktop tool; tokens from mpcfill's TOKEN type; per-card foil.
+4. **Image preparation.** Corner fill, bleed, cache, then the upscale step with engine detection, the 4x-then-Lanczos method, the colour-shift check and the Lanczos fallback. Testable on its own against the Treefolk scans.
+5. **Gallery.** Static page first, then `--serve`, `POST /choose`, and the upscale compare view and switch.
+6. **`mtg print xml` and `send --to notmpc`**, with preflight. This is the point where the friend's flow is fully replaced.
+7. **`mtg print pdf` and `send --to printer`.**
+8. **MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`.
+9. **Later:** `send --to mpc` through the desktop tool; tokens from mpcfill's TOKEN type; per-card foil; a text-safe composite for upscaled cards; art-only upscaling with a re-rendered frame for cards that only exist as poor scans.
 
 ## Open questions
 
 - **Does notmpc resolve `Local File` entries, or Drive ids only?** Settled by spike 1. If Drive only, Scryfall-sourced cards go into a Drive folder of the user's (one-time OAuth, or a manual drag) or into MPC's path instead.
 - **How many anonymous Drive downloads before Google throttles?** Settled by spike 1. The desktop tool uses a service-account key; we would rather not ship one.
+- **Which upscale model, and does the whole-card approach hold up on rules text?** Settled by spike 1. If text degrades at 800 dpi even after the downscale, the text-safe composite moves up from "later" into milestone 4.
+- **How fast is `upscayl-bin` here?** Unmeasured. Nothing published for M-series Macs; one pipeline quotes about 40 s per card on unknown hardware. Settled by spike 1, and it decides whether upscales run in the background during the gallery or synchronously at export.
 - **Which checkout does the MCP server run from?** Today it runs from `~/Documents/Code/10-19 Projects/11 MTG-Deck-Builder`, three merges behind `main`, and the data lives there. Either re-register it against the `~/work` checkout or point `MTG_DATA_DIR` at the existing data, before milestone 2 adds a table that needs a rebuild.
 - **Image terms.** mpcfill's community asks for no commercial use; Scryfall's terms forbid presenting images as counterfeits. A proxy deck for the user's own casual table is what both communities exist for. The tools should not be pointed at resale, and the README should say so in one line.
 - **Rulings on proxies at the user's tables** are the user's business, not the tool's; nothing here changes `mtg check`.
