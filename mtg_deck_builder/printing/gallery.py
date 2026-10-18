@@ -92,7 +92,9 @@ def _badges(card: dict, ch: dict) -> str:
         out.append(_badge("token", "TOKEN"))
     if card.get("status") == "missing":
         out.append(_badge("missing", "MISSING"))
-    out.append(_badge("low", "LOW RES", not (ch and ch.get("dpi") is not None and ch["dpi"] < LOW_DPI)))
+    # "Low res" means the only image is a placeholder-quality scan, not an ordinary 300 dpi scan
+    # (those are upscaled and get the UPSCALE badge instead).
+    out.append(_badge("low", "LOW RES", not (card.get("status") == "lowres" or (ch and ch.get("lowres")))))
     if card.get("will_upscale") or card.get("upscaled_from"):
         src = f' from {_esc(card["upscaled_from"])} dpi' if card.get("upscaled_from") else ""
         out.append(_badge("up", "UPSCALE" + src))
@@ -280,7 +282,7 @@ function paint(i){
     var on=same(c.candidates[+s.dataset.j],ch),b=$('.use',s);
     s.classList.toggle('on',on);b.disabled=on;b.textContent=on?'Chosen':'Use this art';
   });
-  var low=$('.b.low',r);if(low)low.hidden=!(ch.dpi!=null&&ch.dpi<600);
+  var low=$('.b.low',r);if(low)low.hidden=!ch.lowres;
   var cmp=$('[data-ctl=compare]',r);
   if(cmp){cmp.parentNode.hidden=!same(ch,c.original||ch);$$('button',cmp).forEach(function(x){x.classList.toggle('on',x.dataset.which==='after')})}
 }
