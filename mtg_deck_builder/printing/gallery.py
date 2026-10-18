@@ -219,6 +219,8 @@ PAGE = """<!doctype html>
 <meta name="color-scheme" content="dark">
 <title>@@TITLE@@ gallery</title>
 <style>@@CSS@@</style></head><body>
+<div id="banners"><div class="ban" id="fail" role="alert" hidden><span id="failmsg"></span><button type="button" id="failx">Dismiss</button></div>
+<div class="ban" id="stale" role="alert" hidden><span>This gallery was restarted or stopped. Reload to continue.</span><button type="button" id="reload">Reload</button></div></div>
 <header><h1>@@TITLE@@</h1><ul class="stats">@@STATS@@</ul></header>
 <div class="bar"><span id="count">0 changed</span><button type="button" id="copy">Copy choices</button></div>
 <div class="filters">
@@ -274,6 +276,9 @@ figcaption{display:flex;flex-direction:column;gap:2px;min-height:4.6em}.l{overfl
 .none-img{padding:28px 12px;text-align:center;color:var(--dim);border:1px dashed var(--bad);border-radius:12px}
 .ctls{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:8px}.ctl{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--dim)}.ctl[hidden]{display:none}
 .seg{display:inline-flex;gap:4px}.seg button{min-width:44px}.ctl small{color:var(--dim)}
+#banners{position:fixed;top:0;left:0;right:0;z-index:20}
+.ban{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;font-weight:600;border-bottom:2px solid var(--bad);background:#5a1717}.ban[hidden]{display:none}
+#stale{border-color:var(--warn);background:#4a3a12}.ban button{flex:none;padding:0 14px;background:var(--panel2);border:1px solid var(--line);border-radius:8px}
 #toast{position:fixed;left:16px;right:16px;bottom:14px;z-index:9;padding:12px 14px;background:#2b1d1d;border:1px solid var(--bad);border-radius:10px}
 #toast.good{background:#16261e;border-color:var(--ok)}
 @media (min-width:700px){
@@ -290,14 +295,35 @@ var KEY='gallery:'+(D.deck.name||''), changed={}, f={src:'all',sty:[],noub:false
 function $(s,r){return (r||document).querySelector(s)}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))}
 function store(k,v){try{if(v===undefined)return localStorage.getItem(KEY+k);localStorage.setItem(KEY+k,v)}catch(e){}return null}
-var tt;function toast(msg,good){var t=$('#toast');t.textContent=msg;t.className=good?'good':'';t.hidden=false;clearTimeout(tt);tt=setTimeout(function(){t.hidden=true},good?2500:7000)}
+var tt;function toast(msg,good){var t=$('#toast');t.textContent=msg;t.className=good?'good':'';t.hidden=false;clearTimeout(tt);tt=setTimeout(function(){t.hidden=true},good?2000:7000)}
 function post(path,body){
   body.t=T;
   return fetch(path+'?t='+encodeURIComponent(T),{method:'POST',headers:{'Content-Type':'application/json','X-Token':T},body:JSON.stringify(body)})
-   .then(function(r){return r.json().catch(function(){return {ok:false,error:'HTTP '+r.status}})},function(){return {ok:false,gone:true}});
+   .then(function(r){
+     return r.json().then(null,function(){return null}).then(function(j){
+       if(r.ok&&j&&j.ok===true)return j;
+       return {ok:false,error:(j&&j.error)||('HTTP '+r.status)};
+     });
+   },function(){return {ok:false,gone:true}});
 }
-function gone(){toast('The server is not reachable. Your choice is kept on this page: use Copy choices and paste it to the agent.')}
-function fail(res){if(res.gone)gone();else toast('Not saved: '+(res.error||'unknown error'))}
+var GONE='Not saved: the gallery server is not answering. Reload the page (same link) and try again.';
+function fail(res){
+  var m=$('#failmsg');
+  m.textContent=(res&&res.gone)?GONE:'Not saved: '+((res&&res.error)||'unknown error')+'. Reload the page (same link) and try again.';
+  $('#fail').hidden=false;
+}
+function clearFail(){$('#fail').hidden=true}
+
+/* heartbeat: tells the person when the server behind this page was restarted or stopped */
+var misses=0;
+function beat(){
+  return fetch('/done?t='+encodeURIComponent(T),{cache:'no-store'}).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    misses=0;$('#stale').hidden=true;
+  }).then(null,function(){
+    misses++;if(misses>=2)$('#stale').hidden=false;
+  });
+}
 function updateBar(){var n=Object.keys(changed).length,c=$('#count');c.textContent=n+' changed';c.className=n?'some':''}
 function row(i){return $('.row[data-i="'+i+'"]')}
 function same(a,b){return !!a&&!!b&&a.id===b.id&&a.source===b.source}
@@ -326,16 +352,22 @@ function paint(i){
 
 function choose(i,s){
   var c=cards[i],cand=c.candidates[+s.dataset.j];
-  if(same(cand,c.chosen))return;
+  if(same(cand,c.chosen)||s.classList.contains('busy'))return;
   s.classList.add('busy');
   post('/choose',{name:c.name,source:cand.source,id:cand.id}).then(function(res){
     s.classList.remove('busy');
-    if(!res.ok&&!res.gone){fail(res);return}
+    /* Nothing is changed on the page unless the server confirmed the save. */
+    if(!res.ok){fail(res);return}
+    clearFail();
     if(c.original===undefined)c.original=c.chosen||{};
     c.chosen=cand;paint(i);
     if(same(c.original,cand))delete changed[c.name];else changed[c.name]={source:cand.source,id:cand.id};
     updateBar();
-    if(res.gone)gone();
+    apply();
+    var car=$('.car',row(i));
+    if(car&&car.scrollTo)car.scrollTo({left:Math.max(0,s.offsetLeft-(car.clientWidth-s.offsetWidth)/2)});
+    pos(row(i));
+    toast('Saved: '+(cand.label||cand.id),true);
   });
 }
 
@@ -446,6 +478,8 @@ function copy(){
 }
 
 $('#copy').addEventListener('click',copy);
+$('#failx').addEventListener('click',clearFail);$('#reload').addEventListener('click',function(){location.reload()});
+setInterval(beat,15000);
 filters();bind();apply();updateBar();
 window.addEventListener('resize',function(){$$('.row').forEach(pos)});
 try{var y=+store('scroll');if(y)window.scrollTo(0,y)}catch(e){}
@@ -511,10 +545,17 @@ def _accepts_slots(fn) -> bool:
     return any(p.name == "slots" or p.kind is p.VAR_KEYWORD for p in params)
 
 
-def serve(out_path: Path, on_choose, on_upscale=None, *, bind: str | None = None, port: int = 0) -> GalleryServer:
-    """Serve the page at out_path and write taps back through the callbacks."""
+def serve(out_path: Path, on_choose, on_upscale=None, *, bind: str | None = None, port: int = 0,
+          token: str | None = None) -> GalleryServer:
+    """Serve the page at out_path and write taps back through the callbacks.
+
+    A given `token` is used as is (so a restarted server keeps the same URL); otherwise one is generated.
+    """
     out_path = Path(out_path)
-    token = secrets.token_urlsafe(16)
+    if token is None:
+        token = secrets.token_urlsafe(16)
+    elif not re.fullmatch(r"[A-Za-z0-9_-]{16,}", token):
+        raise ValueError("token must be at least 16 characters of A-Z a-z 0-9 _ -")
     state = {"changed": 0}
     lock = threading.Lock()
     slots_ok = _accepts_slots(on_choose)
@@ -614,6 +655,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("json_file", type=Path)
     ap.add_argument("--bind", help="address to bind (default: Tailscale, LAN, then localhost)")
     ap.add_argument("--port", type=int, default=0)
+    ap.add_argument("--token", help="use this token (16+ chars of A-Z a-z 0-9 _ -) so a restart keeps the same URL")
     args = ap.parse_args(argv)
     data = json.loads(args.json_file.read_text(encoding="utf-8"))
     out = write(data["deck"], data["cards"], args.json_file.with_suffix(".gallery.html"))
@@ -625,7 +667,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"upscale {name!r}: {mode}", file=sys.stderr, flush=True)
 
     how = "localhost" if args.bind else pick_bind_address()[1]
-    server = serve(out, on_choose, on_upscale, bind=args.bind, port=args.port)
+    server = serve(out, on_choose, on_upscale, bind=args.bind, port=args.port, token=args.token)
     print(f"Gallery ({how}): {server.url}", flush=True)
     try:
         while True:

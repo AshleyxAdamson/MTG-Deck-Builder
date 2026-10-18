@@ -205,8 +205,18 @@ def run_gallery(db, args: argparse.Namespace) -> dict:
     def on_upscale(name, mode):
         art.set_art(decklist, name, None, None, upscale=mode)
 
-    server = gallery_page.serve(page, on_choose, on_upscale, bind=args.bind, port=args.port)
+    # A restart keeps the previous link alive: same port and token, read back from the URL file.
     url_file = decklist.with_suffix(".gallery.url")
+    port, token = args.port, None
+    if url_file.exists() and not args.port:
+        previous = url_file.read_text(encoding="utf-8").strip()
+        found = re.search(r":(\d+)/\?t=([A-Za-z0-9_-]+)", previous)
+        if found:
+            port, token = int(found[1]), found[2]
+    try:
+        server = gallery_page.serve(page, on_choose, on_upscale, bind=args.bind, port=port, token=token)
+    except OSError:
+        server = gallery_page.serve(page, on_choose, on_upscale, bind=args.bind, port=0, token=token)
     url_file.write_text(server.url + "\n", encoding="utf-8")
     result.update({"url": server.url, "address": server.address})
     print(f"Gallery: {server.url}\n(choices save to {printfile.path_for(decklist).name}; Ctrl-C to stop)", file=sys.stderr)
@@ -223,8 +233,8 @@ def run_gallery(db, args: argparse.Namespace) -> dict:
             import time
             time.sleep(3600)
     except KeyboardInterrupt:
+        # The URL file stays, so the next start reuses the same port and token and old links keep working.
         server.stop()
-        url_file.unlink(missing_ok=True)
     return result
 
 
@@ -401,15 +411,16 @@ def start_gallery_in_tmux(decklist: Path) -> str:
     import time
     session = f"mtg-gallery-{decklist.stem}"
     url_file = decklist.with_suffix(".gallery.url")
-    url_file.unlink(missing_ok=True)
-    command = f"cd {Path.cwd()} && uv run mtg gallery {decklist}"
+    # The file from a previous run is kept (its port and token are reused); wait for it to be rewritten.
+    before = url_file.stat().st_mtime_ns if url_file.exists() else None
+    command = f"cd {Path.cwd()} && uv run mtg gallery {decklist} 2> {decklist.with_suffix('.gallery.log')}"
     if shutil.which("tmux"):
         subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
         subprocess.run(["tmux", "new-session", "-d", "-s", session, command], check=True)
     else:
         subprocess.Popen(command, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(60):
-        if url_file.exists():
+    for _ in range(120):
+        if url_file.exists() and url_file.stat().st_mtime_ns != before:
             return url_file.read_text(encoding="utf-8").strip()
         time.sleep(0.5)
     raise cards.CardDataError(f"The gallery did not start; run `uv run mtg gallery {decklist}` by hand to see why.")
