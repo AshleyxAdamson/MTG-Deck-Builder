@@ -29,6 +29,7 @@ The flow being replaced: Moxfield list → paste into mpcfill.com and pick art p
 | MPC order brackets are 18, 36, 55, 72, 90, 108, 126, 144, 162, 180, 198, 216, 234, 396, 504, 612; max 612 | Read: MPC's `dro_choosesize` dropdown and `frontend/src/common/constants.ts`. |
 | Community print size: 63x88 mm trim plus 36 px bleed per side at 300 dpi, i.e. 816x1110 px at 300 dpi, 2176x2960 at 800, 3264x4440 at 1200; dpi estimated as `10*round(height*300/1110/10)` | Read: repo constants and real Drive files of those sizes. |
 | notmpc.com template: 300 dpi, 822x1122 px with bleed, 750x1050 cut, 690x990 safe; minimum upload 447x597; S33 stock only; 63x88 mm only; max 612 per deck; US based, 1 to 2 days processing plus 3 to 5 transit | Read: notmpc product page and FAQ. |
+| notmpc prints in Los Angeles; it is a real press, not a reseller of MakePlayingCards | Reported by the user from an order notification naming an LA facility (October 2026). Its About and FAQ copy and its S30/S33 stock codes are MakePlayingCards' own, and its FAQ says the business is registered abroad, so it looks like a US production arm of the same group or a licensee of its stock. Which one is unconfirmed. |
 | notmpc accepts the MPC Autofill XML | Read: Draftsim review only (sponsored). notmpc's own pages never mention XML. The user's friend has done it, which is the stronger evidence. |
 | notmpc pricing about $34 for a 100-card Commander deck | Read: Draftsim, 2025-11. The site's own price table is JavaScript and could not be read. Unconfirmed. |
 | Scryfall `png` is 745x1040 RGBA with transparent corners | Ran: downloaded Cultivate (STA 51). |
@@ -93,7 +94,7 @@ Use mpcfill first, Scryfall as the fallback and as the "show me the real printin
 | Quality | Good per the one review found; S33 black core | Good, variable | Lowest; about 300 dpi inkjet, hand cut |
 | Time | 1 to 2 days processing, 3 to 5 in transit | Weeks | Minutes |
 
-notmpc stays the default because it is what already works for the user's circle and ships from the US. The home printer is the only target that can be fully automated, so it is worth building for test prints and single replacements.
+notmpc stays the default because it is what already works for the user's circle and it prints in Los Angeles, so there are no import fees and the cards arrive in about a week. MakePlayingCards is the same stock from the Hong Kong factory, with weeks of shipping and, since the US ended the small-parcel duty exemption in 2025, import fees on a small order; it is the fallback, not a cheaper equivalent. The home printer is the only target that can be fully automated, so it is worth building for test prints and single replacements; notmpc sells blank S33 sheets, which puts factory stock in a home printer.
 
 ### Upscalers
 
@@ -119,4 +120,4 @@ The question is which images need help and what runs on this Mac without a Pytho
 - **Google Drive throttling** on anonymous downloads is not measured. A 100-card deck is about 100 downloads of 2 to 4 MB each. Cache downloads under `data/art/` keyed by Drive id.
 - **New cards** have placeholder images on Scryfall for a few days and no community render for weeks. The gallery has to say so instead of printing a blurry card.
 - **Image terms.** mpcfill asks for no commercial use; Scryfall asks that images not be cropped, color-shifted or presented as counterfeits. Printing a casual proxy deck for the table is the common use case both communities serve; selling the cards is not.
-- **notmpc is a small shop** with a registered-abroad payment system and reader complaints about shipping charges and support. Keep the XML so the same order can go to MPC instead.
+- **notmpc is a small shop** with a registered-abroad payment system and reader complaints about shipping charges and support. It prints in Los Angeles on the same stock MakePlayingCards uses, so it is a different press from the Hong Kong factory, not a front for it. Keep the XML so the same order can go to MPC instead; the trade is weeks of shipping and import fees for the same stock.
