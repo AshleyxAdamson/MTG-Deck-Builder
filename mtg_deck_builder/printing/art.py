@@ -260,6 +260,9 @@ def gallery_payload(db: sqlite3.Connection, decklist: Path, pf: dict, order: dic
             pass
     cards_out = []
     for entry in pf["cards"]:
+        if entry.get("printed"):
+            # Already in the box: nothing to choose. (A reprint goes through set_art or --full.)
+            continue
         is_token = entry.get("kind") == "token"
         if is_token:
             ranked = candidates_for(db, entry.get("token", entry["name"]), None, pf, token_renders, allow_lowres=allow_lowres)
