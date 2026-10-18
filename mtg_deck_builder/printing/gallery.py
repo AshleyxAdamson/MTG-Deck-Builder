@@ -220,9 +220,9 @@ main{padding-bottom:60px}.grp{margin:22px 0 8px;font-size:16px;color:var(--acc);
 .b{font-size:11px;font-weight:700;letter-spacing:.03em;padding:2px 7px;border-radius:99px;background:var(--panel2);border:1px solid var(--line)}.b[hidden]{display:none}
 .b.low,.b.missing{color:var(--bad);border-color:var(--bad)}.b.up{color:var(--acc)}.b.token{color:var(--warn)}
 .carwrap{display:grid;grid-template-columns:minmax(0,1fr);align-items:center}
-.car{display:flex;gap:var(--gap);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;position:relative;scrollbar-width:none;min-width:0}
+.car{display:flex;gap:var(--gap);overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;position:relative;scrollbar-width:none;min-width:0}
 .car::-webkit-scrollbar{display:none}.car:focus-visible{outline:2px solid var(--acc)}
-.slide{flex:0 0 min(100%,420px);margin:0;scroll-snap-align:center;scroll-snap-stop:always;display:flex;flex-direction:column;gap:6px;padding:6px;background:var(--panel);border:2px solid transparent;border-radius:12px}
+.slide{flex:0 0 min(100%,420px);margin:0;scroll-snap-align:center;display:flex;flex-direction:column;gap:6px;padding:6px;background:var(--panel);border:2px solid transparent;border-radius:12px}
 .slide.on{border-color:var(--acc)}.slide[hidden]{display:none}
 .img{position:relative;aspect-ratio:63/88;width:100%;border-radius:4.5%;overflow:hidden;background:var(--panel2)}
 .img img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}.img img.ph{filter:blur(2px)}
@@ -324,7 +324,7 @@ function bind(){
       var tick=false;
       car.addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(function(){tick=false;pos(r)})}},{passive:true});
       ['prev','next'].forEach(function(k,n){var b=$('.'+k,r);b.addEventListener('click',function(){
-        car.scrollBy({left:(n?1:-1)*slideStep(car),behavior:'smooth'})})});
+        car.scrollBy({left:(n?1:-1)*Math.max(slideStep(car),car.clientWidth-slideStep(car)/2),behavior:'smooth'})})});
     }
     var up=$('[data-ctl=upscale]',r);
     if(up)$$('button',up).forEach(function(b){b.addEventListener('click',function(){

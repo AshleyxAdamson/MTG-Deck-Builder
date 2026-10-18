@@ -19,6 +19,7 @@ BASIC_LANDS = {"Plains", "Island", "Swamp", "Mountain", "Forest", "Wastes",
                "Snow-Covered Plains", "Snow-Covered Island", "Snow-Covered Swamp",
                "Snow-Covered Mountain", "Snow-Covered Forest"}
 SPREAD_OVER = 4
+GALLERY_CANDIDATES = 40
 
 
 def read_deck(decklist: Path) -> tuple[Counter, list[str], dict]:
@@ -292,7 +293,8 @@ def gallery_payload(db: sqlite3.Connection, decklist: Path, pf: dict, order: dic
             "will_upscale": bool(dpi) and dpi < min_dpi and entry.get("upscale") != "never" and not entry.get("printed"),
             "upscaled_from": entry.get("upscaled_from"),
             "chosen": _public(chosen) if chosen else None,
-            "candidates": [_public(c) for c in ranked],
+            # Every source is searched, so a staple can have hundreds of renders; the page shows the best.
+            "candidates": [_public(c) for c in ranked[:GALLERY_CANDIDATES]],
             **({"slots": entry["slots"]} if entry.get("slots") else {}),
         })
     # What needs a decision comes first: new cards, then tokens, then what is already in the box.

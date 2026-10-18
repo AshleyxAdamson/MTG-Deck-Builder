@@ -98,10 +98,14 @@ def sources() -> list[dict]:
 
 
 def _source_pks(source_names: list[str] | None) -> list[list]:
-    """[[pk, True], ...] in the order the names were given; that order sets result priority."""
+    """[[pk, True], ...]: the preferred names first (that order sets result priority), then every other source.
+
+    Every source is searched, so a card nobody preferred has rendered is still found; the preferred
+    ones win ties.
+    """
     names = DEFAULT_SOURCES if source_names is None else source_names
     by_name = {source["name"].lower(): source for source in sources()}
-    pks = []
+    pks, seen = [], set()
     for name in names:
         source = by_name.get(name.lower())
         if source is None:
@@ -109,6 +113,8 @@ def _source_pks(source_names: list[str] | None) -> list[list]:
             hint = ", ".join(by_name[c]["name"] for c in close) or "run sources() to list them"
             raise CardDataError(f"mpcfill has no source called {name!r}. Closest: {hint}")
         pks.append([source["pk"], True])
+        seen.add(source["pk"])
+    pks.extend([source["pk"], True] for source in sources() if source["pk"] not in seen)
     return pks
 
 
