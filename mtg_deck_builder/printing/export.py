@@ -170,21 +170,23 @@ def write_xml(order: dict, images: dict, path: Path, *, stock: str, foil: bool) 
     ET.SubElement(details, "stock").text = stock
     ET.SubElement(details, "foil").text = "true" if foil else "false"
     fronts, backs = ET.SubElement(root, "fronts"), ET.SubElement(root, "backs")
-    by_image: dict[tuple, list[int]] = {}
+    # One <card> per deck entry and image, never merged across entries that share an image: the ledger
+    # records each <card> under its <query>, and the query is the entry's name so the ledger matches it.
+    by_entry: dict[tuple, list[int]] = {}
     for slot in order["slots"]:
-        by_image.setdefault((slot["source"], slot["id"], "front"), []).append(slot["slot"])
+        by_entry.setdefault((slot["name"], slot["source"], slot["id"], "front"), []).append(slot["slot"])
         if slot.get("back_id"):
-            by_image.setdefault((slot["source"], slot["back_id"], "back"), []).append(slot["slot"])
-    for key, slot_numbers in by_image.items():
-        image = images["images"][key]
+            by_entry.setdefault((slot["name"], slot["source"], slot["back_id"], "back"), []).append(slot["slot"])
+    for (name, source, ident, face), slot_numbers in by_entry.items():
+        image = images["images"][(source, ident, face)]
         if not image["drive_id"]:
             continue
-        parent = fronts if key[2] == "front" else backs
-        card = ET.SubElement(parent, "card")
+        card = ET.SubElement(fronts if face == "front" else backs, "card")
         ET.SubElement(card, "id").text = image["drive_id"]
         ET.SubElement(card, "slots").text = ",".join(str(n) for n in slot_numbers)
         ET.SubElement(card, "name").text = image["name"]
-        ET.SubElement(card, "query").text = printings.mpcfill_key(image["label"].replace(" (back)", ""))
+        # A card name is matched by the ledger after normalising; a token name is stored as written.
+        ET.SubElement(card, "query").text = name if name.endswith("token") or " token (" in name else printings.mpcfill_key(name)
     ET.SubElement(root, "cardback").text = images["cardback_id"] or ""
     ET.indent(root)
     path.parent.mkdir(parents=True, exist_ok=True)

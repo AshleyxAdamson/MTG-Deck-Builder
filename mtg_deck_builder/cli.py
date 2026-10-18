@@ -164,7 +164,7 @@ def format_print(report: dict) -> str:
         pulled = ", ".join(f"{n} {name}" if n > 1 else name for name, n in sorted(report["to_pull"].items()))
         lines.append(f"  take out of the deck: {pulled}")
     for item in report.get("upscaled", []):
-        how = "resampled only (no upscaler)" if item.get("fallback") else f"{item.get('model')}"
+        how = "resampled only (no upscaler)" if item.get("fallback") else (item.get("model") or "from cache")
         lines.append(f"  upscaled  {item['name']}: {item['from_dpi']} -> {item['to_dpi']} dpi, {how}")
     lines += [f"  PROBLEM  {problem}" for problem in report["problems"]]
     if report.get("xml"):
