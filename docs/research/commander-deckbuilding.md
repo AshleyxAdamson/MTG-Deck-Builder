@@ -22,7 +22,7 @@ For a casual, mid-power (Bracket 2) deck with a commander that costs about four 
 | Ramp | 10 (range 8 to 12). 12 when the commander costs 4 or more. Up to 15 for big-mana decks. | `ramp` (over-counts by 1 to 3, see section 4) | **High**. Maths for the "have one early" odds. |
 | Card advantage | 10 to 12 | `card-advantage` (over-counts by 2 to 4) | **High** on the range, definitions differ. |
 | Targeted removal / disruption | 6 to 10 pieces of removal. Up to 12 if counterspells, bounce and graveyard hate are counted in. | `spot-removal`, plus `counterspell` | **Medium**. The biggest spread between guides, and real decks run fewer than guides say. |
-| Board wipes | 2 to 4. The user's own cap is 1 to 2. | `sweeper` (alias `board-wipe`) | **Medium**. |
+| Board wipes | 2 to 4. The brief's cap is 1 to 2. | `sweeper` (alias `board-wipe`) | **Medium**. |
 | Protection | No template number. Real decks run 2 to 5. Voltron runs 11 or more. | `protection` | **Low** (data only, no guide number). |
 | Recursion | 2 to 3 | `recursion` | **Low to medium**. |
 | Graveyard hate | 1 to 2 | `hate-graveyard` | **Medium**. Every guide that mentions it says "at least one". |
@@ -215,7 +215,7 @@ A general warning for machine rules: **Scryfall tags are broader than guide defi
 ### Win conditions / finishers
 
 - **Range:** Tomer: 1 surprise "I win" card. EDHREC (Cain): at least 7 cards that answer "how do I win". Command Zone: inside the 30 plan cards.
-- **For this user:** Bracket 2 wants wins that are "incremental, telegraphed, and disruptable", which matches the briefs. A finisher here means something that turns a built-up board into a win (a mass pump, a big drain), not a combo.
+- **For the briefs:** Bracket 2 wants wins that are "incremental, telegraphed, and disruptable", which matches the briefs. A finisher here means something that turns a built-up board into a win (a mass pump, a big drain), not a combo.
 - **Tool:** **no tag.** Nearest: `overrun` (trample plus pump), `anthem`, `alternate-win-condition`, `bottomless-mana-sink`, `extra-combat-phase`. None of these identifies "this deck can close a game".
 
 ### Theme / synergy cards
@@ -283,14 +283,14 @@ Signature counts are medians from the same data. Guide advice is cited.
 | **Landfall / ramp** | More lands and far more land ramp; extra land drops; payoffs. Less interaction in practice. | Lands 39, `land-ramp` 22.5, `landfall` 17, `extra-land` 8, spot removal 5, wipes 1. | Draftsim: "as many lands as possible". Playgroup: 38 to 42. |
 | **Control** | Double the interaction, instant speed, card advantage to keep up with three opponents, and a compact way to actually win. | Interaction 20 (spot 10, counters 8.5, wipes 3.5), instants + sorceries 27.5, creatures 17.5. | EDHREC: 15+ removal for long-game control decks. Creature-light decks want more wipes (Tomer). |
 | **Group hug / social** | A real win condition, effects that favour you slightly more than the table, and defence. Removal is usually cut too far. | `group-hug` 22.5, `card-advantage` 27, spot removal 5.5, wipes 1. | Card Kingdom (Tom Anderson): win by outlasting, by resource overload into mana sinks, or by gifts that hurt. EDHREC: a hug deck with no win condition just picks the winner. |
-| **Top of library / Sphinx** (Esper deck) | Top-deck manipulation as the engine; payoffs for it; because the curve is top-heavy, more lands and ramp than the baseline. | Top-of-library theme: `top-deck-manipulation` 31, avg MV 3.8. Sphinx commanders: avg MV 4.0, 26 nonland cards at 5+ mana, `evasion` 27.5, `card-advantage` 24, counters 4. | No dedicated guide found. See the note below. |
-| **Deathtouch / snakes / hydras** (Sultai deck) | Deathtouch decks lean on removal-like effects; hydras are X spells that work as mana sinks. | Deathtouch: `spot-removal` 13. Snakes: `land-ramp` 7.5, creatures 32.5. Hydras: ramp 16, `pp-counters-matter` 17. | Draftsim: decks with mana sinks and X spells want 39 to 42 lands. |
+| **Top of library / Sphinx** (an Esper top-of-library brief) | Top-deck manipulation as the engine; payoffs for it; because the curve is top-heavy, more lands and ramp than the baseline. | Top-of-library theme: `top-deck-manipulation` 31, avg MV 3.8. Sphinx commanders: avg MV 4.0, 26 nonland cards at 5+ mana, `evasion` 27.5, `card-advantage` 24, counters 4. | No dedicated guide found. See the note below. |
+| **Deathtouch / snakes / hydras** (a Sultai deathtouch brief) | Deathtouch decks lean on removal-like effects; hydras are X spells that work as mana sinks. | Deathtouch: `spot-removal` 13. Snakes: `land-ramp` 7.5, creatures 32.5. Hydras: ramp 16, `pp-counters-matter` 17. | Draftsim: decks with mana sinks and X spells want 39 to 42 lands. |
 
 ### Notes for the three current briefs
 
-- **Vampire Plague (WB, Elenda):** matches the vampire and aristocrats rows closely (section 9).
-- **Sphinx Oracle (Esper):** this is the brief where the baseline is most wrong. Real sphinx lists average mana value 4.0. Karsten's formula at 4.0 with 8 cheap ramp or draw pieces gives about 42 lands; even discounting heavily, plan for 38 to 40 lands and 12 ramp, and use the cheap scry/surveil/top-manipulation cards as the low end of the curve. `card-advantage` will read very high in this deck because every selection spell is tagged; do not treat that as "enough draw".
-- **Sultai gorgon / snake / hydra:** if hydras are a real part of the deck, count X spells as expensive when judging the curve (the tool's average mana value will understate it) and lean to 38 to 39 lands. Green makes land ramp the natural choice, which also fits a graveyard foundation.
+- **Deck B (WB vampires):** matches the vampire and aristocrats rows closely (section 9).
+- **An Esper sphinx brief:** this is the brief where the baseline is most wrong. Real sphinx lists average mana value 4.0. Karsten's formula at 4.0 with 8 cheap ramp or draw pieces gives about 42 lands; even discounting heavily, plan for 38 to 40 lands and 12 ramp, and use the cheap scry/surveil/top-manipulation cards as the low end of the curve. `card-advantage` will read very high in this deck because every selection spell is tagged; do not treat that as "enough draw".
+- **A Sultai gorgon, snake and hydra brief:** if hydras are a real part of the deck, count X spells as expensive when judging the curve (the tool's average mana value will understate it) and lean to 38 to 39 lands. Green makes land ramp the natural choice, which also fits a graveyard foundation.
 
 ---
 
@@ -344,7 +344,7 @@ No source gives a Commander number. What exists:
 - Card Kingdom (Kristen Gregory, 19 May 2026): a tapped land is only painless on turn 1, on turn 3 with a two-drop, or on turn 4 with a three-drop. Prefer taplands that do something (scry, surveil, cycling, Bojuka Bog, Path of Ancestry) and play more basics. Cheap commanders make taplands worse.
 - Data: EDHREC average decks carry a median of 3 always-tapped and 8 or 9 conditional lands.
 
-A workable rule for this user's budget two- and three-colour decks: **at most 6 to 8 always-tapped lands, fewer if the commander costs 3 or less**, and count conditional lands lightly. Tool tags: `tapland`, `conditional-tapland`.
+A workable rule for budget two- and three-colour decks: **at most 6 to 8 always-tapped lands, fewer if the commander costs 3 or less**, and count conditional lands lightly. Tool tags: `tapland`, `conditional-tapland`.
 
 ### Mana rocks against land ramp
 
@@ -397,12 +397,12 @@ Definitions that matter:
 - **Tutors:** no bracket rule since October 2025. The cheapest broad ones are Game Changers.
 - **Intent:** Wizards calls it the most important part of the system. A deck that obeys the letter of a bracket but plays above it should be declared at the higher bracket. A combo that happens by accident is not a violation.
 
-**Bracket 2 (Core) is the target for this user's briefs.** Its description: unoptimised and straightforward decks, wins that are "incremental, telegraphed, and disruptable", low-pressure and social play. That is close to a restatement of the vampire brief ("opponents should be able to see the threat building and respond").
+**Bracket 2 (Core) is the target for the briefs.** Its description: unoptimised and straightforward decks, wins that are "incremental, telegraphed, and disruptable", low-pressure and social play. That is close to a restatement of the vampire brief ("opponents should be able to see the threat building and respond").
 
 Cards in or near the briefs that the bracket system flags:
 
 - **Tergrid, God of Fright** is a Game Changer and was ranked the 4th saltiest card in EDHREC's 2025 poll. It is on the vampire brief's candidate list. The current draft does not run it.
-- **Consecrated Sphinx** is a Game Changer (Wizards called it borderline in October 2025). It is the obvious sphinx for the Esper deck and would take the deck out of Bracket 2 unless the table agrees otherwise.
+- **Consecrated Sphinx** is a Game Changer (Wizards called it borderline in October 2025). It is the obvious sphinx for an Esper sphinx deck and would take the deck out of Bracket 2 unless the table agrees otherwise.
 - **Sanguine Bond + Exquisite Blood** is a two-card infinite combo, already excluded by the vampire brief.
 - **Farewell** has been a Game Changer since February 2026, which matters for any white deck picking its one or two wipes.
 
@@ -418,21 +418,21 @@ Rules a skill can apply for "not feel-bad", in rough order of how well supported
 2. Avoid effects that stop opponents using their resources: stax, heavy taxes, mass discard, repeated theft. Tags to watch: `tax`, `rule-of-law`, `lockdown`, `discard`, `theft`, `hatebear`.
 3. Wins should be visible a turn ahead and answerable by a wipe or a removal spell.
 4. Keep turns short: limit long non-deterministic loops and heavy tutor chains.
-5. Keep wipes few (the user's rule) and prefer ones that end a stall instead of resetting the game.
+5. Keep wipes few (the brief's rule) and prefer ones that end a stall instead of resetting the game.
 
 ### Budget and power
 
 - Wizards' brackets do not use price at all.
 - Card Kingdom (Scott Cullen, 19 July 2022): budget has "very little impact" on power level; expensive staples are usually the most efficient version of an effect or the only one in a colour, so the cheap replacement costs some efficiency, not function. The author runs most decks under $150.
-- EDHREC's commander pages split decks into budget, mid and expensive. Elenda's page, for example, lists 698 budget, 5,587 mid and 698 expensive decks, so the same commander is built at every price.
+- EDHREC's commander pages split decks into budget, mid and expensive. A popular commander's page, for example, lists 698 budget, 5,587 mid and 698 expensive decks, so the same commander is built at every price.
 - Where budget really bites is the mana base (more tapped lands, fewer dual lands) and fast mana and tutors, which are also exactly the Game Changer categories. A $150 deck with no Game Changers lands in Bracket 2 almost by construction. The practical cost of budget is consistency: more taplands, so respect the tapland ceiling and the land count.
 - Tomer's checklist was written for budget decks, so its numbers (37 lands, 13 ramp, 10 draw) are the best-matched template for a $150 build.
 
 ---
 
-## 9. Sanity check: the Elenda draft
+## 9. Sanity check: a vampire deck draft
 
-`uv run mtg check decks/vampire-plague-elenda.txt` on 2026-10-12: valid, $142.27, 36 lands, 33 creatures, average mana value 3.3, tagged 9 ramp, 15 card-advantage, 12 removal, 2 sweepers. Extra counts below are own calc with the same tags.
+`uv run mtg check decks/<deck>.txt` on 2026-10-12: valid, $142.27, 36 lands, 33 creatures, average mana value 3.3, tagged 9 ramp, 15 card-advantage, 12 removal, 2 sweepers. Extra counts below are own calc with the same tags.
 
 | Measure | Draft | Guidance | EDHREC vampire decks (median) | Verdict |
 |---|---|---|---|---|
@@ -440,7 +440,7 @@ Rules a skill can apply for "not feel-bad", in rough order of how well supported
 | Ramp, tagged | 9 | 10, or 12 for a 4-mana commander | 9.5 | Real count is 7 rocks: two of the nine tagged cards are Path to Exile (false positive) and Legion's Landing. Herald's Horn is a cost reducer the tag misses. So 8 at best. Low. |
 | Card advantage, tagged | 15 | 10 to 12 | 12.5 | Fine. About 12 or 13 after removing Mind Stone and Voldaren Estate, which are tagged only for an incidental draw ability. Seven are repeatable engines by the `draw-engine` tag. |
 | Spot removal, tagged | 10 | 6 to 10 | 9 | Fine. Seven real spells plus three incidental. Covers creatures, artifacts and enchantments. |
-| Board wipes | 2 | 2 to 4 (user cap 2) | 3 | At the cap. Both are one-sided for a vampire board, which is what guides advise for go-wide. |
+| Board wipes | 2 | 2 to 4 (brief cap 2) | 3 | At the cap. Both are one-sided for a vampire board, which is what guides advise for go-wide. |
 | Protection | 0 | 2 to 5 | 3 | **Gap.** Nothing protects the board from someone else's wipe, the standard go-wide weakness. |
 | Recursion | 6 | 2 to 3 | 3 | High on purpose (the "raise their dead" package). |
 | Graveyard hate | 1 | 1 to 2 | 2 | Kaya, Geist Hunter only by tag. A Bojuka Bog would be a free second. |
@@ -488,7 +488,7 @@ Not checkable from tags at all: two-card combos, whether the deck has a way to w
 1. **Lands: 35, 37 or 40?** Observed decks sit at 35 to 37. Templates say 36 to 38. Karsten's maths and Playgroup's opening-hand data say 38 to 42, and Karsten argues directly that 36 is too few. The Command Zone moved up to 38 in 2025 and cites Karsten. The gap is partly real (casual players under-run lands) and partly definitional (rocks, MDFCs and cheap draw substitute for some lands). For a budget deck with more taplands and few cheap cantrips, the higher end is the safer reading.
 2. **Do rocks replace lands?** EDHREC's mana-base article says never cut lands for rocks. Karsten says one land per two or three rocks, from a base of 42. Draftsim says about two rocks per land from a base of 40. These land in similar places (37 to 39 lands with 8 to 10 rocks) because they start from different bases.
 3. **How much targeted removal?** 5 or 6 (Tomer, the first Command Zone template, measured decks) against 10 to 12 (the later Command Zone templates, EDHREC's upgrade guide). The trend in guides since 2021 is clearly upward. Part of the gap is that newer templates count counterspells, bounce and graveyard hate in the same bucket.
-4. **Board wipes:** 2 (EDHREC) to 5 (2017 Command Zone). The newer advice is fewer true wipes. The user's cap of 1 to 2 is at the low end of every guide but consistent with the go-wide advice.
+4. **Board wipes:** 2 (EDHREC) to 5 (2017 Command Zone). The newer advice is fewer true wipes. The brief's cap of 1 to 2 is at the low end of every guide but consistent with the go-wide advice.
 5. **What is card advantage?** The Command Zone excludes selection (Ponder). EDHREC's "card velocity" and Scryfall's tag include it. This changes the count by 3 to 10 cards in blue decks.
 6. **Is the Brackets system about to change?** Wizards said in February 2026 that it was considering splitting Bracket 3 and might drop the beta label, with an update expected mid-2026. I found none. Re-check before the skill hard-codes bracket rules.
 7. **Unverified items a later pass could close:** the exact numbers and wording of Command Zone episodes 151, 379 and 658 (needs the audio or a transcript); Tolarian Community College's advice; the origin of 8x8 and 7x9; Nate Burgess's original formula; EDHREC's 2026 salt results.
@@ -530,7 +530,7 @@ All accessed 2026-10-12.
 
 ### Archetypes
 
-- EDHREC JSON for theme pages, commander pages and average decks, e.g. https://json.edhrec.com/pages/tags/aristocrats.json and https://json.edhrec.com/pages/average-decks/elenda-the-dusk-rose.json. Supports: all "own calc" archetype numbers.
+- EDHREC JSON for theme pages, commander pages and average decks, e.g. https://json.edhrec.com/pages/tags/aristocrats.json and https://json.edhrec.com/pages/average-decks/<commander>.json. Supports: all "own calc" archetype numbers.
 - Cooper Gottfried, "EDHREC Guide to Aristocrats in Commander": https://edhrec.com/guides/edhrec-guide-to-aristocrats-in-commander
 - Alex Ullman, "How to Play an Aristocrats Commander Deck", TCGplayer (page updated 13 Feb 2025): https://www.tcgplayer.com/content/article/How-to-Play-an-Aristocrats-Commander-Deck/61620389-aef6-4c14-93ae-2a3645173f6c/
 - Nick Price, "EDHREC Guide to Spellslinger in Commander": https://edhrec.com/guides/edhrec-guide-to-spellslinger-in-commander
@@ -559,4 +559,4 @@ All accessed 2026-10-12.
 
 ### Local
 
-- This repo's Scryfall index (`data/cards.sqlite`, bulk data dated 2026-10-12): tag contents, the Game Changer flag, and all counts of the Elenda draft.
+- This repo's Scryfall index (`data/cards.sqlite`, bulk data dated 2026-10-12): tag contents, the Game Changer flag, and all counts of the vampire deck draft.

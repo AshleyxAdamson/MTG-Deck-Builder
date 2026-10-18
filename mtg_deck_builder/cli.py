@@ -484,7 +484,7 @@ def main() -> None:
     art_cmd.add_argument("--no-renders", action="store_true", help="Scryfall printings only, no community renders")
     art_cmd.add_argument("--keep", action="store_true", help="keep choices the user or the ledger made; fill gaps only")
     art_cmd.add_argument("--allow-lowres", action="store_true", help="accept low-resolution scans when nothing better exists")
-    art_cmd.add_argument("--printed-as", help="the physical deck this list upgrades, for the ledger (e.g. treefolk-quickbeam)")
+    art_cmd.add_argument("--printed-as", help="the physical deck this list upgrades, for the ledger (e.g. my-deck)")
     art_cmd.add_argument("--no-tokens", action="store_true", help="leave out the tokens the deck makes")
     art_cmd.add_argument("--no-ledger", action="store_true", help="ignore what has been printed before")
     art_cmd.add_argument("--artist", help="prefer this artist everywhere")

@@ -11,7 +11,7 @@ The ledger in the decks repo (`decks/printed/ledger.csv`, order XMLs in `decks/p
 
 ## Steps
 
-1. **Know the deck.** The decklist must pass `mtg check` (`validate_deck`). If the list has a new name for a deck that already exists in the box (`treefolk-quickbeam-v2.txt` for the printed `treefolk-quickbeam`), the ledger needs `printed_as = "treefolk-quickbeam"`. Ask once per deck whether basic lands should be spread over several arts (the default) or one.
+1. **Know the deck.** The decklist must pass `mtg check` (`validate_deck`). If the list has a new name for a deck that already exists in the box (`my-deck-v2.txt` for the printed `my-deck`), the ledger needs `printed_as = "my-deck"`. Ask once per deck whether basic lands should be spread over several arts (the default) or one.
 
 2. **Choose art.** `choose_art(decklist, style, printed_as, basics)`. Read back: how many are already printed, how many are new (renders vs scans), which will be upscaled (300 dpi scans; fine, it takes about 10 seconds each), which only exist low-res, and which have no image yet. A card with no image is a new card Scryfall has not scanned; it waits for a later order or prints low-res if the user says so.
 

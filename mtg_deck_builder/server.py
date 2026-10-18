@@ -201,13 +201,13 @@ def validate_deck(
 
 @server.tool()
 def choose_art(
-    decklist: Annotated[str, Field(description="Path to the deck's .txt file, e.g. decks/treefolk-quickbeam-v2.txt.")],
+    decklist: Annotated[str, Field(description="Path to the deck's .txt file, e.g. decks/my-deck-v2.txt.")],
     style: Annotated[Literal["fullart", "borderless", "classic", "newest"], Field(
         description="What 'nice' means: fullart (default) prefers borderless, full-art, showcase and extended-art "
                     "treatments; classic prefers the plain modern frame; newest the latest printing.")] = "fullart",
     printed_as: Annotated[str | None, Field(
         description="The physical deck this list upgrades, when the decklist has a new name "
-                    "(e.g. 'treefolk-quickbeam' for treefolk-quickbeam-v2.txt), so the ledger's prints count.")] = None,
+                    "(e.g. 'my-deck' for my-deck-v2.txt), so the ledger's prints count.")] = None,
     basics: Annotated[Literal["vary", "same"] | None, Field(
         description="Spread basic lands over several arts (vary, default) or print one art (same). Ask the user once per deck.")] = None,
     keep: Annotated[bool, Field(description="Keep choices the user or the ledger made; only fill gaps.")] = False,
