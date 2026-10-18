@@ -102,15 +102,24 @@ def _slide(j: int, cand: dict, chosen: dict) -> str:
     chips += "".join(_chip("sty", _esc(k)) for k in keys)
     if not std:
         chips += _chip("nostd", "NO RULES BOX")
+    lang = str(cand.get("language") or "").strip()
+    if lang and lang.upper() != "EN":
+        chips += _chip("lang", _esc(lang.upper()))
+    rs = str(cand.get("render_source") or "").strip()
+    strip = ('<button type="button" data-act="one">Hide this art</button>'
+             + (f'<button type="button" data-act="all">Hide all from {_esc(rs)}</button>' if rs else "")
+             + '<button type="button" data-act="cancel">Cancel</button>')
     ub = bool(cand.get("universes_beyond")) or "universes-beyond" in keys
     q = f'{cand.get("label", "")} {cand.get("artist") or ""}'.lower()
     return (
         f'<figure class="slide{" on" if on else ""}" data-j="{j}" data-style="{_style(cand)}" '
-        f'data-styles="|{_esc("|".join(keys))}|" data-std="{int(std)}" data-ub="{int(ub)}" data-q="{_esc(q)}">'
+        f'data-styles="|{_esc("|".join(keys))}|" data-std="{int(std)}" data-ub="{int(ub)}" data-rs="{_esc(rs)}" data-q="{_esc(q)}">'
         f'<div class="img" role="img" aria-label="{_esc(label)}">{ph}{big}</div>'
         f'<figcaption><span class="l">{_esc(label)}</span><span class="a">{_esc(second)}</span>'
         f'<span class="chips">{chips}</span></figcaption>'
-        f'<button type="button" class="use"{" disabled" if on else ""}>{"Chosen" if on else "Use this art"}</button></figure>'
+        f'<div class="acts"><button type="button" class="use"{" disabled" if on else ""}>{"Chosen" if on else "Use this art"}</button>'
+        f'<button type="button" class="hidebtn" aria-label="Hide this art">Hide</button></div>'
+        f'<div class="hidestrip" hidden>{strip}</div></figure>'
     )
 
 
@@ -269,6 +278,12 @@ figcaption{display:flex;flex-direction:column;gap:2px;min-height:4.6em}.l{overfl
 .chip.render{color:var(--ok)}.chip.scan{color:var(--warn)}.chip.sty{color:var(--acc);text-transform:uppercase}
 .chip.nostd{color:var(--dim);background:transparent;border-style:dashed}
 .slide .chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.acts{display:flex;gap:6px}.acts .use{width:auto;flex:1 1 0;min-width:0}
+.hidebtn{flex:none;min-width:64px;min-height:44px;padding:0 12px;background:transparent;border:1px solid var(--line);border-radius:8px;color:var(--dim)}.hidebtn[hidden]{display:none}
+.hidestrip{display:flex;flex-direction:column;gap:6px}.hidestrip[hidden]{display:none}
+.hidestrip button{min-height:44px;padding:4px 10px;border-radius:8px;border:1px solid var(--bad);background:transparent;color:var(--bad);font-weight:600;overflow-wrap:anywhere}
+.hidestrip button[data-act=cancel]{border-color:var(--line);color:var(--dim)}
+.chip.lang{color:var(--warn)}
 .use{width:100%;min-height:44px;border:1px solid var(--acc);border-radius:8px;background:var(--acc);color:#0b1020;font-weight:700}
 .use:disabled{background:var(--panel2);border-color:var(--line);color:var(--dim)}.slide.busy{opacity:.55}
 .arr{display:none;width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);font-size:24px;line-height:1;padding:0}
@@ -342,8 +357,8 @@ function slideStep(car){var s=$('.slide:not([hidden])',car);return s?s.offsetWid
 function paint(i){
   var c=cards[i],ch=c.chosen||{},r=row(i);
   $$('.slide',r).forEach(function(s){
-    var on=same(c.candidates[+s.dataset.j],ch),b=$('.use',s);
-    s.classList.toggle('on',on);b.disabled=on;b.textContent=on?'Chosen':'Use this art';
+    var cd=c.candidates[+s.dataset.j],on=same(cd,ch),b=$('.use',s);
+    s.classList.toggle('on',on);b.disabled=on;b.textContent=on?(cd._gone?'Chosen (hidden; re-run art)':'Chosen'):'Use this art';
   });
   var low=$('.b.low',r);if(low)low.hidden=!ch.lowres;
   var cmp=$('[data-ctl=compare]',r);
@@ -360,7 +375,7 @@ function choose(i,s){
     if(!res.ok){fail(res);return}
     clearFail();
     if(c.original===undefined)c.original=c.chosen||{};
-    c.chosen=cand;paint(i);
+    c.chosen=cand;paint(i);sweep(i);
     if(same(c.original,cand))delete changed[c.name];else changed[c.name]={source:cand.source,id:cand.id};
     updateBar();
     apply();
@@ -371,8 +386,45 @@ function choose(i,s){
   });
 }
 
+/* hidden art: drop the slides, but a chosen one stays (marked) until another art is chosen */
+function live(c){return c.candidates.filter(function(x){return !x._gone})}
+function sweep(k){
+  var r=row(k),c=cards[k];
+  $$('.slide',r).forEach(function(s){
+    var x=c.candidates[+s.dataset.j];if(!x._gone)return;
+    if(same(x,c.chosen)){var hb=$('.hidebtn',s),st=$('.hidestrip',s);if(hb)hb.hidden=true;if(st)st.hidden=true}
+    else s.remove();
+  });
+  if(!$$('.slide',r).length){
+    var w=$('.carwrap',r),p=$('.pos',r),d=document.createElement('div');
+    d.className='none-img';d.textContent='No printable image';
+    if(w)w.replaceWith(d);if(p)p.remove();
+  }
+}
+function hideArt(i,s,all){
+  var c=cards[i],cand=c.candidates[+s.dataset.j];
+  if(s.classList.contains('busy'))return;
+  var body={name:c.name,id:cand.id};
+  if(all&&cand.render_source)body.source_name=cand.render_source;
+  s.classList.add('busy');
+  post('/hide',body).then(function(res){
+    s.classList.remove('busy');
+    if(!res.ok){fail(res);return}
+    clearFail();
+    cards.forEach(function(cc,k){
+      var hit=false;
+      cc.candidates.forEach(function(x){
+        if(all&&body.source_name?x.render_source===body.source_name:(k===i&&same(x,cand))){x._gone=true;hit=true}
+      });
+      if(hit){paint(k);sweep(k)}
+    });
+    apply();
+    toast('Hidden',true);
+  });
+}
+
 function splitSlots(i,n){
-  var c=cards[i],ids=c.candidates.slice(0,n),tot=0,k;
+  var c=cards[i],ids=live(c).slice(0,n),tot=0,k;
   for(k in c.slots)tot+=c.slots[k];
   if(!tot)tot=c.copies||n;
   var base=Math.floor(tot/n),extra=tot%n,out={};
@@ -390,6 +442,14 @@ function bind(){
     var i=+r.dataset.i,c=cards[i],car=$('.car',r);
     if(car){
       $$('.use',car).forEach(function(b){b.addEventListener('click',function(){choose(i,b.closest('.slide'))})});
+      $$('.slide',car).forEach(function(s){
+        var hb=$('.hidebtn',s),st=$('.hidestrip',s);
+        hb.addEventListener('click',function(){st.hidden=!st.hidden});
+        $$('button',st).forEach(function(b){b.addEventListener('click',function(){
+          if(b.dataset.act==='cancel'){st.hidden=true;return}
+          hideArt(i,s,b.dataset.act==='all');
+        })});
+      });
       var tick=false;
       car.addEventListener('scroll',function(){if(!tick){tick=true;requestAnimationFrame(function(){tick=false;pos(r)})}},{passive:true});
       ['prev','next'].forEach(function(k,n){var b=$('.'+k,r);b.addEventListener('click',function(){
@@ -408,7 +468,7 @@ function bind(){
     })});
     var sl=$('[data-ctl=slots]',r);
     if(sl){showSlots(i);$$('button',sl).forEach(function(b){b.addEventListener('click',function(){
-      var n=Math.max(1,Math.min(4,c.candidates.length,Object.keys(c.slots).length+(+b.dataset.d)));
+      var n=Math.max(1,Math.min(4,live(c).length,Object.keys(c.slots).length+(+b.dataset.d)));
       var slots=splitSlots(i,n);
       post('/slots',{name:c.name,slots:slots}).then(function(res){
         if(!res.ok){fail(res);return}
@@ -545,7 +605,7 @@ def _accepts_slots(fn) -> bool:
     return any(p.name == "slots" or p.kind is p.VAR_KEYWORD for p in params)
 
 
-def serve(out_path: Path, on_choose, on_upscale=None, *, bind: str | None = None, port: int = 0,
+def serve(out_path: Path, on_choose, on_upscale=None, on_hide=None, *, bind: str | None = None, port: int = 0,
           token: str | None = None) -> GalleryServer:
     """Serve the page at out_path and write taps back through the callbacks.
 
@@ -629,6 +689,15 @@ def serve(out_path: Path, on_choose, on_upscale=None, *, bind: str | None = None
                     if mode not in ("auto", "never", "always"):
                         return self._json(400, {"ok": False, "error": "mode must be auto, never or always"})
                     on_upscale(name, mode)
+                elif parts.path == "/hide":
+                    ident, source_name = body.get("id"), body.get("source_name")
+                    if on_hide is None:
+                        return self._json(400, {"ok": False, "error": "hiding is not supported"})
+                    if not isinstance(ident, str) or not ident:
+                        return self._json(400, {"ok": False, "error": "id is required"})
+                    if source_name is not None and (not isinstance(source_name, str) or not source_name):
+                        return self._json(400, {"ok": False, "error": "source_name must be a non-empty string"})
+                    on_hide(name, ident, source_name)
                 elif parts.path == "/slots":
                     slots = body.get("slots")
                     if not slots_ok:
@@ -666,8 +735,11 @@ def main(argv: list[str] | None = None) -> int:
     def on_upscale(name, mode):
         print(f"upscale {name!r}: {mode}", file=sys.stderr, flush=True)
 
+    def on_hide(name, ident, source_name=None):
+        print(f"hide {name!r}: {ident}" + (f" (all from {source_name!r})" if source_name else ""), file=sys.stderr, flush=True)
+
     how = "localhost" if args.bind else pick_bind_address()[1]
-    server = serve(out, on_choose, on_upscale, bind=args.bind, port=args.port, token=args.token)
+    server = serve(out, on_choose, on_upscale, on_hide, bind=args.bind, port=args.port, token=args.token)
     print(f"Gallery ({how}): {server.url}", flush=True)
     try:
         while True:

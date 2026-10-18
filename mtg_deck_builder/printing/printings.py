@@ -55,14 +55,18 @@ NAME_STYLES = {
     "book": "showcase", "nsfw": "nsfw", "upscaled": "upscaled-scan", "secret lair": "secret-lair", "sld": "secret-lair",
 }
 # A render with any of these does not look like an ordinary Magic card: no cost or rules box.
-NON_STANDARD = {"minimalist", "textless", "custom-frame", "altered", "sketch", "pop-out", "pixel"}
+NON_STANDARD = {"minimalist", "textless", "custom-frame", "altered", "sketch", "pop-out", "pixel", "novelty-frame"}
+# Drives whose whole point is non-standard frames (pixel fonts, parchment, stained glass...). A render
+# from one of them with no style word in its name is a novelty frame; a labelled one (Min-, Sketch) is
+# whatever its label says.
+NOVELTY_SOURCES = {"trix are for scoot", "trix are for scoot 2", "st. milton", "st. milton 2"}
 # What lands may be anyway: a land has no cost and its rules are simple.
 LAND_OK = {"textless", "minimalist", "full-art"}
 IMPLIED = {"minimalist": "custom-frame", "sketch": "altered", "pop-out": "altered", "pixel": "altered", "ai-art": "custom-art"}
 
 
-def styles_of(label: str, tags: list[str], aliases: dict | None = None) -> set[str]:
-    """Style keys for a render, from its tags and the words in its name."""
+def styles_of(label: str, tags: list[str], aliases: dict | None = None, source: str | None = None) -> set[str]:
+    """Style keys for a render, from its tags, the words in its name, and which drive it is from."""
     styles: set[str] = set()
     aliases = aliases if aliases is not None else {}
     for tag in tags or []:
@@ -86,6 +90,8 @@ def styles_of(label: str, tags: list[str], aliases: dict | None = None) -> set[s
     for key, implied in IMPLIED.items():
         if key in styles:
             styles.add(implied)
+    if "trixified" in text or ((source or "").lower() in NOVELTY_SOURCES and not styles):
+        styles.add("novelty-frame")
     return styles
 
 
@@ -188,9 +194,10 @@ def mpcfill_candidates(names: list[str], source_names: list[str] | None, card_ty
             if not card:
                 continue
             fancy = mpcfill.is_fancy(card)
-            styles = styles_of(card["name"], card.get("tags") or [], aliases)
+            styles = styles_of(card["name"], card.get("tags") or [], aliases, card.get("sourceName"))
             found[name].append({
                 "styles": sorted(styles),
+                "language": (card.get("language") or "EN").upper(),
                 "universes_beyond_tag": "universes-beyond" in styles,
                 "source": "mpcfill",
                 "id": drive_id,
@@ -254,19 +261,25 @@ def score(candidate: dict, style: str) -> float:
 
 
 def rank(candidates: list[dict], style: str, *, artist: str | None = None, set_code: str | None = None,
-         hide_ub: bool = False, exclude_styles: set[str] | None = None, land: bool = False) -> list[dict]:
+         hide_ub: bool = False, exclude_styles: set[str] | None = None, land: bool = False,
+         languages: set[str] | None = None, hidden: set[str] | None = None) -> list[dict]:
     """Best first. Pins (artist, set) go to the top; ties break on dpi, then newest.
 
-    Candidates carrying an excluded style are dropped; a land keeps the styles in LAND_OK.
+    Candidates carrying an excluded style, in another language, or hidden by the user are dropped;
+    a land keeps the styles in LAND_OK.
     """
     excluded = set(exclude_styles or ()) - (LAND_OK if land else set())
+    languages = {lang.upper() for lang in languages} if languages else None
+    hidden = hidden or set()
 
     def key(c: dict):
         pinned = (artist and (c.get("artist") or "").lower() == artist.lower()) or \
                  (set_code and (c.get("set") or "").lower() == set_code.lower())
         return (not pinned, -score(c, style), -c.get("dpi", 0), c.get("released_at") or "")
     kept = [c for c in candidates if not (hide_ub and c.get("universes_beyond"))
-            and not (set(c.get("styles") or ()) & excluded)]
+            and not (set(c.get("styles") or ()) & excluded)
+            and not (languages and c.get("language") and c["language"] not in languages)
+            and c["id"] not in hidden and (c.get("render_source") or "") not in hidden]
     ordered = sorted(kept, key=key)
     for position, c in enumerate(ordered):
         c["score"] = score(c, style)

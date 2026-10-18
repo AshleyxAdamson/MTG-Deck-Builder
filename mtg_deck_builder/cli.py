@@ -205,6 +205,9 @@ def run_gallery(db, args: argparse.Namespace) -> dict:
     def on_upscale(name, mode):
         art.set_art(decklist, name, None, None, upscale=mode)
 
+    def on_hide(name, ident, source_name=None):
+        art.hide_render(decklist, ident, source_name)
+
     # A restart keeps the previous link alive: same port and token, read back from the URL file.
     url_file = decklist.with_suffix(".gallery.url")
     port, token = args.port, None
@@ -214,9 +217,9 @@ def run_gallery(db, args: argparse.Namespace) -> dict:
         if found:
             port, token = int(found[1]), found[2]
     try:
-        server = gallery_page.serve(page, on_choose, on_upscale, bind=args.bind, port=port, token=token)
+        server = gallery_page.serve(page, on_choose, on_upscale, on_hide=on_hide, bind=args.bind, port=port, token=token)
     except OSError:
-        server = gallery_page.serve(page, on_choose, on_upscale, bind=args.bind, port=0, token=token)
+        server = gallery_page.serve(page, on_choose, on_upscale, on_hide=on_hide, bind=args.bind, port=0, token=token)
     url_file.write_text(server.url + "\n", encoding="utf-8")
     result.update({"url": server.url, "address": server.address})
     print(f"Gallery: {server.url}\n(choices save to {printfile.path_for(decklist).name}; Ctrl-C to stop)", file=sys.stderr)

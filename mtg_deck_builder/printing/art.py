@@ -68,10 +68,28 @@ def candidates_for(db: sqlite3.Connection, name: str, row: sqlite3.Row | None, s
         found.extend(printings.scryfall_candidates(db, row["oracle_id"], allow_lowres=allow_lowres))
     pins = settings.get("pins", {}).get(name, {}) if isinstance(settings.get("pins"), dict) else {}
     land = bool(row is not None and "Land" in (row["type_line"] or "").split(" // ")[0])
+    styles_cfg = settings.get("styles") or {}
     return printings.rank(found, style, artist=pins.get("artist") or settings.get("artist"),
                           set_code=pins.get("set") or settings.get("set"),
                           hide_ub=settings.get("hide_universes_beyond", False),
-                          exclude_styles=set((settings.get("styles") or {}).get("exclude") or ()), land=land)
+                          exclude_styles=set(styles_cfg.get("exclude") or ()), land=land,
+                          languages=set(styles_cfg.get("languages") or ()), hidden=set(settings.get("hidden") or ()))
+
+
+def hide_render(decklist: Path, ident: str | None, source_name: str | None = None) -> dict:
+    """Hide one render (by Drive id) or a whole drive (by source name) from this deck's choices.
+
+    A hidden render that is currently chosen is re-chosen from what is left on the next `mtg art --keep`.
+    """
+    path = printfile.path_for(decklist)
+    pf = printfile.load(path)
+    hidden = list(pf.get("hidden") or [])
+    for value in (ident, source_name):
+        if value and value not in hidden:
+            hidden.append(value)
+    pf["hidden"] = hidden
+    printfile.save(pf, path)
+    return {"hidden": hidden}
 
 
 def _entry_from(candidate: dict | None, name: str, copies: int, kind: str = "card") -> dict:
@@ -313,7 +331,7 @@ def gallery_payload(db: sqlite3.Connection, decklist: Path, pf: dict, order: dic
 
 def _public(c: dict) -> dict:
     keys = ("source", "id", "label", "artist", "dpi", "fancy", "universes_beyond", "thumb", "large", "lowres",
-            "render_source", "styles", "standard")
+            "render_source", "styles", "standard", "language")
     return {k: c.get(k) for k in keys if c.get(k) is not None}
 
 

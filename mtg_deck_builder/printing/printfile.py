@@ -23,7 +23,10 @@ DEFAULTS = {
     "basics": "vary",
     "upscale": {"engine": "auto", "model": "ultrasharp-4x", "min_dpi": 600, "target_dpi": 800},
     # Styles never chosen or shown. Lands keep textless, minimalist and full-art anyway (see printings.LAND_OK).
-    "styles": {"exclude": ["minimalist", "textless", "custom-frame", "altered", "ai-art", "non-black-border", "alt-name", "nsfw"]},
+    # novelty-frame: unlabelled renders from the drives that make non-standard frames (pixel fonts, parchment,
+    # stained glass). Minimalist, custom frames, altered art and odd borders are allowed.
+    "styles": {"exclude": ["novelty-frame", "sketch", "pixel", "textless", "ai-art", "nsfw"], "languages": ["EN"]},
+    "hidden": [],   # render ids or source names the user hid in the gallery
 }
 
 
