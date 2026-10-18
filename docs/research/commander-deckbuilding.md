@@ -283,14 +283,14 @@ Signature counts are medians from the same data. Guide advice is cited.
 | **Landfall / ramp** | More lands and far more land ramp; extra land drops; payoffs. Less interaction in practice. | Lands 39, `land-ramp` 22.5, `landfall` 17, `extra-land` 8, spot removal 5, wipes 1. | Draftsim: "as many lands as possible". Playgroup: 38 to 42. |
 | **Control** | Double the interaction, instant speed, card advantage to keep up with three opponents, and a compact way to actually win. | Interaction 20 (spot 10, counters 8.5, wipes 3.5), instants + sorceries 27.5, creatures 17.5. | EDHREC: 15+ removal for long-game control decks. Creature-light decks want more wipes (Tomer). |
 | **Group hug / social** | A real win condition, effects that favour you slightly more than the table, and defence. Removal is usually cut too far. | `group-hug` 22.5, `card-advantage` 27, spot removal 5.5, wipes 1. | Card Kingdom (Tom Anderson): win by outlasting, by resource overload into mana sinks, or by gifts that hurt. EDHREC: a hug deck with no win condition just picks the winner. |
-| **Top of library / Sphinx** (Esper deck) | Top-deck manipulation as the engine; payoffs for it; because the curve is top-heavy, more lands and ramp than the baseline. | Top-of-library theme: `top-deck-manipulation` 31, avg MV 3.8. Sphinx commanders: avg MV 4.0, 26 nonland cards at 5+ mana, `evasion` 27.5, `card-advantage` 24, counters 4. | No dedicated guide found. See the note below. |
-| **Deathtouch / snakes / hydras** (Sultai deck) | Deathtouch decks lean on removal-like effects; hydras are X spells that work as mana sinks. | Deathtouch: `spot-removal` 13. Snakes: `land-ramp` 7.5, creatures 32.5. Hydras: ramp 16, `pp-counters-matter` 17. | Draftsim: decks with mana sinks and X spells want 39 to 42 lands. |
+| **Top of library / Sphinx** (an Esper top-of-library brief) | Top-deck manipulation as the engine; payoffs for it; because the curve is top-heavy, more lands and ramp than the baseline. | Top-of-library theme: `top-deck-manipulation` 31, avg MV 3.8. Sphinx commanders: avg MV 4.0, 26 nonland cards at 5+ mana, `evasion` 27.5, `card-advantage` 24, counters 4. | No dedicated guide found. See the note below. |
+| **Deathtouch / snakes / hydras** (a Sultai deathtouch brief) | Deathtouch decks lean on removal-like effects; hydras are X spells that work as mana sinks. | Deathtouch: `spot-removal` 13. Snakes: `land-ramp` 7.5, creatures 32.5. Hydras: ramp 16, `pp-counters-matter` 17. | Draftsim: decks with mana sinks and X spells want 39 to 42 lands. |
 
 ### Notes for the three current briefs
 
 - **Deck B (WB vampires):** matches the vampire and aristocrats rows closely (section 9).
-- **Sphinx Oracle (Esper):** this is the brief where the baseline is most wrong. Real sphinx lists average mana value 4.0. Karsten's formula at 4.0 with 8 cheap ramp or draw pieces gives about 42 lands; even discounting heavily, plan for 38 to 40 lands and 12 ramp, and use the cheap scry/surveil/top-manipulation cards as the low end of the curve. `card-advantage` will read very high in this deck because every selection spell is tagged; do not treat that as "enough draw".
-- **Sultai gorgon / snake / hydra:** if hydras are a real part of the deck, count X spells as expensive when judging the curve (the tool's average mana value will understate it) and lean to 38 to 39 lands. Green makes land ramp the natural choice, which also fits a graveyard foundation.
+- **An Esper sphinx brief:** this is the brief where the baseline is most wrong. Real sphinx lists average mana value 4.0. Karsten's formula at 4.0 with 8 cheap ramp or draw pieces gives about 42 lands; even discounting heavily, plan for 38 to 40 lands and 12 ramp, and use the cheap scry/surveil/top-manipulation cards as the low end of the curve. `card-advantage` will read very high in this deck because every selection spell is tagged; do not treat that as "enough draw".
+- **A Sultai gorgon, snake and hydra brief:** if hydras are a real part of the deck, count X spells as expensive when judging the curve (the tool's average mana value will understate it) and lean to 38 to 39 lands. Green makes land ramp the natural choice, which also fits a graveyard foundation.
 
 ---
 
@@ -402,7 +402,7 @@ Definitions that matter:
 Cards in or near the briefs that the bracket system flags:
 
 - **Tergrid, God of Fright** is a Game Changer and was ranked the 4th saltiest card in EDHREC's 2025 poll. It is on the vampire brief's candidate list. The current draft does not run it.
-- **Consecrated Sphinx** is a Game Changer (Wizards called it borderline in October 2025). It is the obvious sphinx for the Esper deck and would take the deck out of Bracket 2 unless the table agrees otherwise.
+- **Consecrated Sphinx** is a Game Changer (Wizards called it borderline in October 2025). It is the obvious sphinx for an Esper sphinx deck and would take the deck out of Bracket 2 unless the table agrees otherwise.
 - **Sanguine Bond + Exquisite Blood** is a two-card infinite combo, already excluded by the vampire brief.
 - **Farewell** has been a Game Changer since February 2026, which matters for any white deck picking its one or two wipes.
 
