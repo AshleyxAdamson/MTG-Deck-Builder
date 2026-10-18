@@ -310,13 +310,26 @@ def _public(c: dict) -> dict:
 
 
 def set_art(decklist: Path, name: str, source: str | None, ident: str | None, *, slots: dict | None = None,
-            upscale: str | None = None) -> dict:
-    """One card by hand (the gallery and `mtg art set` call this). Returns the updated entry."""
+            upscale: str | None = None, copies: int | None = None, drop: bool = False) -> dict:
+    """One card by hand (the gallery and `mtg pick` call this). Returns the updated entry.
+
+    `copies` changes how many go in the order (tokens only: a card's count comes from the decklist);
+    `drop` removes a token entry altogether.
+    """
     path = printfile.path_for(decklist)
     pf = printfile.load(path)
     entry = printfile.card_entry(pf, name)
     if entry is None:
         raise CardDataError(f"{name} is not in {path.name}. Run mtg art first.")
+    if copies is not None or drop:
+        if entry.get("kind") != "token":
+            raise CardDataError(f"{name} is a card: its copies come from the decklist, not the print file.")
+        if drop:
+            pf["cards"].remove(entry)
+            printfile.save(pf, path)
+            return {"name": name, "dropped": True}
+        entry["copies"] = max(1, int(copies))
+        entry["chosen_by"] = "user"
     if source and ident:
         entry.update({"source": source, "id": ident, "chosen_by": "user"})
         entry.pop("status", None)

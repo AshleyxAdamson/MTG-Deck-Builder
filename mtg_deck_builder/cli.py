@@ -247,7 +247,8 @@ def run(args: argparse.Namespace) -> None:
                 printed_as=args.printed_as, with_tokens=not args.no_tokens, use_ledger=not args.no_ledger,
                 artist=args.artist, set_code=args.set)
         elif args.command == "pick":
-            result = art.set_art(Path(args.decklist), args.name, args.source, args.id, upscale=args.upscale)
+            result = art.set_art(Path(args.decklist), args.name, args.source, args.id, upscale=args.upscale,
+                                 copies=args.copies, drop=args.drop)
         elif args.command == "gallery":
             result = run_gallery(db, args)
         elif args.command == "print":
@@ -302,7 +303,10 @@ def run(args: argparse.Namespace) -> None:
     elif args.command == "art":
         print(format_art(result))
     elif args.command == "pick":
-        print(f"{result['name']}: {result.get('source')} {result.get('id')} upscale={result.get('upscale')}")
+        if result.get("dropped"):
+            print(f"{result['name']}: left out of the order")
+        else:
+            print(f"{result['name']}: {result.get('source')} {result.get('id')} x{result.get('copies')} upscale={result.get('upscale')}")
     elif args.command == "gallery":
         print(result.get("url") or result["page"])
     elif args.command == "print":
@@ -478,6 +482,8 @@ def main() -> None:
     pick.add_argument("--source", choices=("mpcfill", "scryfall"))
     pick.add_argument("--id", help="Drive id (mpcfill) or Scryfall id")
     pick.add_argument("--upscale", choices=printfile.UPSCALE_MODES)
+    pick.add_argument("--copies", type=int, help="how many of a token to print")
+    pick.add_argument("--drop", action="store_true", help="leave a token out of the order")
 
     gal = commands.add_parser("gallery", help="write the art gallery page and serve it (phone-friendly)")
     gal.add_argument("decklist")
