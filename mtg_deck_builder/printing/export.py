@@ -55,7 +55,8 @@ def plan(db: sqlite3.Connection, decklist: Path, pf: dict, *, full: bool = False
         for ident, source, n in _allocate(entry, copies):
             for _ in range(n):
                 slots.append({"name": name, "entry": entry, "source": source, "id": ident,
-                              "back_id": entry.get("back_id"), "slot": len(slots)})
+                              "back_id": entry.get("back_id"),
+                              "back_source": entry.get("back_source", entry.get("source")), "slot": len(slots)})
     quantity = len(slots)
     bracket = bracket_for(quantity)
     if quantity and bracket is None:
@@ -115,14 +116,18 @@ def resolve_images(db: sqlite3.Connection, pf: dict, order: dict, *, upload: boo
             ident = slot["id"] if face == "front" else slot.get("back_id")
             if not ident:
                 continue
-            key = (slot["source"], ident, face)
+            source = slot["source"] if face == "front" else slot["back_source"]
+            key = (source, ident, face)
             if key in resolved:
                 continue
             mode = entry.get("upscale", "auto")
-            if slot["source"] == "mpcfill":
+            if source == "mpcfill":
                 dpi = entry.get("dpi") or 0
+                if face == "back":
+                    dpi = int((mpcfill.cards([ident]).get(ident) or {}).get("dpi") or dpi)
                 if mode != "always" and (dpi >= min_dpi or mode == "never"):
-                    resolved[key] = {"drive_id": ident, "name": entry.get("label") or slot["name"], "label": slot["name"], "prepared": False}
+                    label = entry.get("back_label") if face == "back" else entry.get("label")
+                    resolved[key] = {"drive_id": ident, "name": label or slot["name"], "label": slot["name"], "prepared": False}
                     continue
                 src = mpcfill.download(ident)
                 info = prepare.prepare(src, "render", min_dpi=min_dpi if mode != "always" else 10_000,
@@ -176,7 +181,7 @@ def write_xml(order: dict, images: dict, path: Path, *, stock: str, foil: bool) 
     for slot in order["slots"]:
         by_entry.setdefault((slot["name"], slot["source"], slot["id"], "front"), []).append(slot["slot"])
         if slot.get("back_id"):
-            by_entry.setdefault((slot["name"], slot["source"], slot["back_id"], "back"), []).append(slot["slot"])
+            by_entry.setdefault((slot["name"], slot["back_source"], slot["back_id"], "back"), []).append(slot["slot"])
     for (name, source, ident, face), slot_numbers in by_entry.items():
         image = images["images"][(source, ident, face)]
         if not image["drive_id"]:

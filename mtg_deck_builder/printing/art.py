@@ -6,6 +6,7 @@ Tokens the deck makes are added. See docs/spec/print-suite.md, "Step 1".
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections import Counter
 from pathlib import Path
@@ -114,12 +115,16 @@ def choose_art(db: sqlite3.Connection, decklist: Path, *, style: str = "fullart"
 
     token_list = tokens.tokens_for_deck(db, rows) if with_tokens else []
     names_to_choose = [n for n in counts if not (previous and _kept(previous, n))]
+    # A double-faced card needs a back image too; its back face is searched by its own name.
+    back_faces = {name: _back_face(db, rows[name]) for name in names_to_choose}
+    back_faces = {name: face for name, face in back_faces.items() if face}
     renders_by_name: dict[str, list[dict]] = {}
     token_renders: dict[str, list[dict]] = {}
     report = {"renders_online": None}
     if renders:
         try:
-            renders_by_name = printings.mpcfill_candidates(names_to_choose, pf["sources"])
+            renders_by_name = printings.mpcfill_candidates(
+                names_to_choose + sorted(set(back_faces.values()) - set(names_to_choose)), pf["sources"])
             if token_list:
                 token_renders = printings.mpcfill_candidates(
                     sorted({t["token"] for t in token_list}), pf["sources"], card_type="TOKEN")
@@ -145,6 +150,8 @@ def choose_art(db: sqlite3.Connection, decklist: Path, *, style: str = "fullart"
             continue
         ranked = candidates_for(db, name, row, pf, renders_by_name, allow_lowres=allow_lowres)
         entry = _entry_from(ranked[0] if ranked else None, name, copies)
+        if name in back_faces and entry.get("id"):
+            _choose_back(entry, ranked, renders_by_name.get(back_faces[name], []), pf.get("style", "fullart"))
         if already:
             entry.update({"printed": True, "printed_copies": already, "chosen_by": "ledger"})
         if name in BASIC_LANDS and copies > 1 and pf.get("basics", "vary") == "vary" and ranked:
@@ -170,6 +177,32 @@ def choose_art(db: sqlite3.Connection, decklist: Path, *, style: str = "fullart"
     report.update(summary(pf))
     report["path"] = str(path)
     return pf, report
+
+
+def _back_face(db: sqlite3.Connection, row: sqlite3.Row) -> str | None:
+    """The back face's name for a transform or modal double-faced card, else None."""
+    if not row["faces"]:
+        return None
+    newest = cards.printings_of(db, row["oracle_id"])
+    if not newest or newest[0]["layout"] not in ("transform", "modal_dfc"):
+        return None
+    faces = json.loads(row["faces"])
+    return faces[1]["name"] if len(faces) > 1 else None
+
+
+def _choose_back(entry: dict, ranked: list[dict], back_renders: list[dict], style: str) -> None:
+    """Pair a back image with the chosen front: a render of the back face when one exists, else the
+    back of a Scryfall printing (the same printing when the front is a scan)."""
+    if entry["source"] == "scryfall" and entry.get("back_id"):
+        entry["back_source"] = "scryfall"
+        return
+    back = printings.rank(list(back_renders), style)
+    if back:
+        entry.update({"back_source": "mpcfill", "back_id": back[0]["id"], "back_label": back[0]["label"]})
+        return
+    scan = next((c for c in ranked if c["source"] == "scryfall" and c.get("back_png")), None)
+    if scan:
+        entry.update({"back_source": "scryfall", "back_id": scan["id"], "back_label": scan["label"] + " (back)"})
 
 
 def _kept(previous: dict, name: str) -> bool:
