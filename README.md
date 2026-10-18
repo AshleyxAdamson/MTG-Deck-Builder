@@ -190,10 +190,10 @@ The evidence behind the skill's baseline and behind combo detection is in `docs/
 From a checked decklist to a proxy order at [notmpc.com](https://notmpc.com), printing only the cards you do not have yet. The design is in `docs/spec/print-suite.md`; the `print-deck` skill (`.claude/skills/print-deck/`) walks an agent through it. In short:
 
 ```bash
-uv run mtg art decks/treefolk-quickbeam-v2.txt --printed-as treefolk-quickbeam   # choose a printing per card
-uv run mtg gallery decks/treefolk-quickbeam-v2.txt                                # swap art from the phone or the Mac
-uv run mtg print decks/treefolk-quickbeam-v2.txt --to notmpc                      # the order XML, and the shop page
-uv run mtg placed decks/treefolk-quickbeam-v2.txt NMPC-12345 --date 2026-10-20    # record it so it is never reprinted
+uv run mtg art decks/my-deck-v2.txt --printed-as my-deck   # choose a printing per card
+uv run mtg gallery decks/my-deck-v2.txt                                # swap art from the phone or the Mac
+uv run mtg print decks/my-deck-v2.txt --to notmpc                      # the order XML, and the shop page
+uv run mtg placed decks/my-deck-v2.txt NMPC-12345 --date 2026-10-20    # record it so it is never reprinted
 uv run mtg ship decks/a.txt decks/b.txt                                           # the first two steps for several decks
 ```
 

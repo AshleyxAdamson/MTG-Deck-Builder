@@ -33,7 +33,7 @@ DEFAULTS = {
 
 
 def path_for(decklist: Path) -> Path:
-    """decks/treefolk.txt -> decks/treefolk.print.toml"""
+    """decks/my-deck.txt -> decks/my-deck.print.toml"""
     return decklist.with_suffix(".print.toml")
 
 

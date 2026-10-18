@@ -14,7 +14,7 @@ Results on the test cases:
 
 | Case | Combos in the deck (offline) | Live endpoint | Verdict |
 |---|---|---|---|
-| Elenda draft as it is | 0 | 0 | Clean. 17 combos are one card away. |
+| A vampire deck draft as it is | 0 | 0 | Clean. 17 combos are one card away. |
 | + Sanguine Bond + Exquisite Blood | 2 infinite | same 2 | Correct, and it found a second loop (Vito + Exquisite Blood). |
 | + Dusk Legion Sergeant | 0 | 0 | Correct. The suspected loop is not a loop (see below). |
 | + Bloodthirsty Conqueror | 1 infinite | same 1 | Correct (Vito + Bloodthirsty Conqueror). |
@@ -87,7 +87,7 @@ Request (JSON; a plain-text decklist with `Content-Type: text/plain` is also acc
 
 ```json
 {
-  "commanders": [{"card": "Elenda, the Dusk Rose", "quantity": 1}],
+  "commanders": [{"card": "<commander>", "quantity": 1}],
   "main": [{"card": "Sol Ring", "quantity": 1}, {"card": "Swamp", "quantity": 11}]
 }
 ```
@@ -280,7 +280,7 @@ The live API is not required. It is useful as an optional cross-check.
 
 ## Test results
 
-Deck: `decks/vampire-plague-elenda.txt`, commander Elenda, the Dusk Rose. Offline runs used the bulk file stamped `2026-10-12T19:13:28Z` with local template evaluation. Live runs sent full card names.
+Deck: `decks/<deck>.txt`, a vampire deck draft. Offline runs used the bulk file stamped `2026-10-12T19:13:28Z` with local template evaluation. Live runs sent full card names.
 
 ### 1. The draft as it is
 
@@ -524,7 +524,7 @@ allowed_combos = ["2292-2744--5"]   # optional: ids accepted on purpose, not cou
 - **Unverified combos do not fail a rule.** They produce a warning naming the template, for example: "Possible infinite combo: Viscera Seer + Cathars' Crusade + any Persist Creature. Could not confirm offline." Once templates are evaluated, this warning becomes rare.
 - If a combo rule is set and `data/combos.sqlite` is missing, add a warning that the rule could not be checked, the way price rules warn about unpriced cards. Do not pass silently.
 
-For the Elenda deck, `max_infinite_combos = 0` replaces the hand-written `not_together` pair and also covers Vito + Exquisite Blood, which the pair missed.
+For a vampire deck draft, `max_infinite_combos = 0` replaces the hand-written `not_together` pair and also covers Vito + Exquisite Blood, which the pair missed.
 
 ### "Almost there" combos
 
@@ -571,8 +571,8 @@ To reproduce (paths shortened: `$S` is the scratchpad, `$R` the repo):
 ```bash
 python3 -I $S/proto/build_index.py $S/dl-variants/variants.json.gz $S/out/combos.sqlite
 python3 -I $S/proto/template_eval.py $S/out/combos.sqlite $R/data/cards.sqlite $S/out/template-matches-local.json
-python3 -I $S/proto/check_offline.py $S/out/combos.sqlite $R/data/cards.sqlite $R/decks/vampire-plague-elenda.txt \
-    --commander "Elenda, the Dusk Rose" --templates $S/out/template-matches-local.json --add "Bloodthirsty Conqueror"
+python3 -I $S/proto/check_offline.py $S/out/combos.sqlite $R/data/cards.sqlite $R/decks/<deck>.txt \
+    --commander "<commander>" --templates $S/out/template-matches-local.json --add "Bloodthirsty Conqueror"
 ```
 
 Downloaded data is beside it: `dl-variants/` (the bulk file), `dl-live/` and `dl-live-fullnames/` (API responses for each case), `dl-templates/` (template card lists), `dl-src/` (backend source files read). Built outputs are in `out/`.
