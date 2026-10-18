@@ -17,6 +17,17 @@ Moxfield drops out. mpcfill.com drops out as a website but stays as the image li
 - Paying for the user. Checkout on a print shop stays a human step.
 - Tokens and card backs beyond one chosen back for the whole deck (tokens are a later milestone).
 
+## One interface
+
+The user has one interface: the conversation. The agent has one command: `mtg ship`. The user touches two other things only: a gallery page to swap art, and the shop's pay button.
+
+```bash
+uv run mtg ship decks/treefolk-quickbeam.txt            # art → gallery → preflight → XML → opens notmpc
+uv run mtg ship decks/treefolk-quickbeam.txt --to printer
+```
+
+`mtg ship` runs the four steps below in order and stops only where a human is needed: it opens the gallery and waits for "done" (or `--no-gallery` to take the defaults), and it ends at the shop's checkout page with the order filled. The four steps stay as their own commands for repair work (swap one card, re-export) and as MCP tools for the agent; `ship` is what the `print-deck` skill calls.
+
 ## The flow
 
 ```
@@ -226,6 +237,7 @@ MCP tools in `server.py`, each a thin wrapper like `validate_deck`, so they work
 | `set_art(decklist, name, source, id)` | One card by hand, for "use the John Avon one for the Forests". Searches both sources for the name when `id` is omitted and returns the candidates instead. |
 | `print_deck(decklist, target, options)` | Step 3. Returns the output path, the preflight report including which cards were upscaled and from what dpi, and for shops the manual steps left. |
 | `prepare_images(decklist, only?)` | Runs fill, upscale and bleed ahead of time, in the background, so the gallery's compare view and the export are ready. Returns progress and the per-card result. |
+| `ship_deck(decklist, to, style, gallery=true)` | The whole thing: steps 1 to 3 in order. Returns the gallery URL while it waits, then the preflight report, the output path and the remaining manual steps. The skill's normal entry point. |
 
 A new skill, `.claude/skills/print-deck/SKILL.md`, walks the agent through: confirm the decklist passes `mtg check`; run `choose_art` with the style the user asked for and read back the missing list and anything chosen below 600 dpi; open the gallery and wait for "done"; run the preflight; say the price estimate and the manual steps; hand over the XML or PDF path. The `commander-deck` skill's last step gains one line pointing here.
 
@@ -252,7 +264,7 @@ mtg_deck_builder/printing/
   sources.toml   # default mpcfill source order
 ```
 
-`cards.py` gains the `printings` table in `build_index` and a `printings_of(db, oracle_id)` query. `cli.py` gains `art`, `gallery`, `print` and `print ... prepare`. `pyproject.toml` gains `pillow`. Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `.xml`, `.pdf` and `cards/` land; add `/data/art/`.
+`cards.py` gains the `printings` table in `build_index` and a `printings_of(db, oracle_id)` query. `cli.py` gains `ship`, plus `art`, `gallery`, `print` and `print ... prepare` as its parts. `pyproject.toml` gains `pillow`. Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `.xml`, `.pdf` and `cards/` land; add `/data/art/`.
 
 ## Milestones
 
@@ -265,7 +277,7 @@ Each one ships on its own and is checked against the real Treefolk deck, as the 
 5. **Gallery.** Static page first, then `--serve`, `POST /choose`, and the upscale compare view and switch.
 6. **`mtg print xml` and `send --to notmpc`**, with preflight. This is the point where the friend's flow is fully replaced.
 7. **`mtg print pdf` and `send --to printer`.**
-8. **MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`.
+8. **`mtg ship`, the MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`. From here the whole flow is one sentence to the agent.
 9. **Later:** `send --to mpc` through the desktop tool, then our own Playwright drivers for the notmpc upload form and the MPC order flow, each stopping at the pay button; tokens from mpcfill's TOKEN type; per-card foil; a text-safe composite for upscaled cards; art-only upscaling with a re-rendered frame for cards that only exist as poor scans.
 
 ## Open questions
