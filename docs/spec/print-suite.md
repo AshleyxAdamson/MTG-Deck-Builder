@@ -14,33 +14,57 @@ Moxfield drops out. mpcfill.com drops out as a website but stays as the image li
 
 - Designing custom cards or alters. Only existing Magic cards, with existing printings or community renders.
 - Running or replacing mpcfill.com. We call its public JSON API and read its XML format; we host nothing.
-- Paying for the user. Checkout on a print shop stays a human step.
-- Tokens and card backs beyond one chosen back for the whole deck (tokens are a later milestone).
+- Paying for the user. The final pay click on a print shop stays a human step; everything before it is automated.
+- Home printing. The user has no printer and does not want one; the PDF and `lpr` targets from an earlier draft are dropped. The image preparation is shop-grade only.
+- Illustrated card backs beyond matching what a deck already has.
+
+## Decisions taken (2026-10-17, with the user)
+
+| Question | Decision |
+|---|---|
+| Image source | Community renders first, Scryfall printings as fallback |
+| Universes Beyond art | Scored down; shown in the gallery, chosen only when nothing else exists |
+| Gallery | Served from the Mac and reachable from the phone over Tailscale, with a token |
+| Checkout | Drive notmpc's form to the pay button, with a saved login so reorders are one click |
+| Home printing | Out of scope |
+| Basic lands | Ask per deck whether to spread copies over several arts; default is spread |
+| Card back | The user chose plain. The two decks already printed each have an illustrated mpcfill back (a different one each), so the default is "match the deck's existing back", plain for a new deck. Confirm. |
+| Tokens | Yes, the tokens the deck makes are added to the order |
+| Reprints | Only cards not yet printed go in a new order. The ledger in the decks repo (`printed/ledger.csv`, `printed/orders/*.xml`, `tools/printed.py`) is the record, and this suite reads and writes it |
+| First order through the suite | The two pending to-print lists: Treefolk v2 (39 cards) and Vampires (5 cards), as one combined order |
+| Who builds | This agent, one PR per milestone (assumed) |
+| Users | Just the user (assumed), so setup can assume this Mac, this notmpc account and the private decks repo |
 
 ## One interface
 
 The user has one interface: the conversation. The agent has one command: `mtg ship`. The user touches two other things only: a gallery page to swap art, and the shop's pay button.
 
 ```bash
-uv run mtg ship decks/treefolk-quickbeam.txt            # art → gallery → preflight → XML → opens notmpc
-uv run mtg ship decks/treefolk-quickbeam.txt --to printer
+uv run mtg ship decks/treefolk-quickbeam-v2.txt --printed-as treefolk-quickbeam   # art → gallery → delta → XML → notmpc checkout
+uv run mtg ship decks/treefolk-quickbeam-v2.txt --printed-as treefolk-quickbeam decks/vampire-plague-elenda.txt   # one order, two decks
 ```
 
-`mtg ship` runs the four steps below in order and stops only where a human is needed: it opens the gallery and waits for "done" (or `--no-gallery` to take the defaults), and it ends at the shop's checkout page with the order filled. The four steps stay as their own commands for repair work (swap one card, re-export) and as MCP tools for the agent; `ship` is what the `print-deck` skill calls.
+`mtg ship` runs the steps below in order and stops only where a human is needed: it opens the gallery and waits for "done" (or `--no-gallery` to take the defaults), and it ends on notmpc's checkout page with the order filled and the user logged in. It prints only what the ledger says has not been printed. The steps stay as their own commands for repair work (swap one card, re-export) and as MCP tools for the agent; `ship` is what the `print-deck` skill calls.
 
 ## The flow
 
 ```
-decks/<name>.txt  ──mtg art──▶  decks/<name>.print.toml  ──mtg gallery──▶  browser (user clicks)
-    (exists)                       (one printing per card)        ▲    │ writes back
+decks/<name>.txt ─┐
+decks/printed/    ├─mtg art──▶ decks/<name>.print.toml ──mtg gallery──▶ browser (Mac or phone)
+ ledger.csv       │            (one printing per card;          ▲    │ writes back
+ orders/*.xml  ───┘             printed cards locked)            │    │
                                             │ ◀─────────────────────────┘
                                             ▼
-                                        mtg print
-                          ┌─────────────────┼──────────────────┐
-                     xml (notmpc / MPC)   pdf (home)        send (lpr)
+                                   mtg print (delta only)
+                                 ┌──────────┴──────────┐
+                     decks/printed/orders/<deck>-<n>.xml   send --to notmpc (form filled, saved login, stop at pay)
+                              + images                     send --to mpc    (fallback)
+                                            │
+                                            ▼  after "paid, order NMPC-123"
+                                 printed.py add → ledger.csv
 ```
 
-Four new commands, each also an MCP tool, each a small Python module under `mtg_deck_builder/printing/`. Everything runs from the existing `uv run mtg ...` entry point and reads the existing deck files; nothing changes for `mtg check` or the deck format.
+New commands, each also an MCP tool, each a small Python module under `mtg_deck_builder/printing/`. Everything runs from the existing `uv run mtg ...` entry point and reads the existing deck files; nothing changes for `mtg check` or the deck format.
 
 ## Step 1: choose a printing for every card (`mtg art`)
 
@@ -71,7 +95,11 @@ For each unique name in the decklist plus the commander from the rules file, gat
 
 A render with a dpi below 600 loses 2. The user can pin an artist (`--artist "John Avon"`) or a set (`--set sld`) for one card or for all. A card with no candidate at all (new cards sit at placeholder quality on Scryfall for days and have no render for weeks) is written with `status = "missing"` and listed in the command's output; printing refuses until every card has an image or the user passes `--allow-lowres`.
 
-**Basic lands.** `--basics same` (default) picks one art for all copies; `--basics vary` spreads the copies over the top N candidates for that land, N = min(copies, 4). The print file records the split per slot.
+**Basic lands.** The agent asks once per deck: `--basics vary` (the default when unanswered) spreads the copies over the top N candidates for that land, N = min(copies, 4), all in the chosen style; `--basics same` picks one art for all copies. The print file records the split per slot and the answer, so later runs do not ask again.
+
+**Tokens.** Every card's Scryfall record lists the tokens it makes under `all_parts` (component `token`), so no text parsing is needed. Each distinct token the deck makes gets `copies = min(4, number of cards that make it)`, with its own entry in the print file (`kind = "token"`), its art from mpcfill's `TOKEN` type first and the token's own Scryfall printings second, and the same gallery row as a card. Tokens count toward the order size and go into the ledger like cards. `--no-tokens` leaves them out.
+
+**Already printed.** `mtg art` reads the ledger first. A card the ledger has for this deck (or for `--printed-as <deck>`, the physical deck this list upgrades) is written with `printed = true`, its art set to the ledger's `drive_id` and `art`, and `chosen_by = "ledger"`. It is not re-chosen and not re-printed unless the user asks (see "Printing only what changed").
 
 **Output: `decks/<name>.print.toml`.** This is the deck's print state, next to its `.txt`, `.rules.toml` and `.md`, so it lives in the user's decks repo and survives sessions:
 
@@ -87,7 +115,9 @@ engine = "upscayl"                   # upscayl | none | command
 model = "ultrasharp-4x"
 min_dpi = 600                        # anything below is upscaled
 target_dpi = 800                     # what every image is delivered at
-cardback = { source = "mpcfill", id = "16g2UamJ2jzwNHovLesvsinvd6_qPkZfy", name = "MTG back (black)" }
+cardback = { source = "mpcfill", id = "1Y_6xlunE57sI4B3865jpGDL_11FHz5nQ" }   # from the deck's last order XML; { kind = "plain", color = "#000000" } for a new deck
+basics = "vary"                                    # the per-deck answer: vary | same
+printed_as = "treefolk-quickbeam"                  # the physical deck this list upgrades, for the ledger
 sources = ["JohnPrime", "MrTeferi", "Chilli_Axe", "WarpDandy", "Nelynes", "SilvanMTG", "PsilosX"]
 
 [[cards]]
@@ -121,12 +151,61 @@ label = "MID 47, Nils Hamm"
 dpi = 300
 
 [[cards]]
+name = "Sol Ring"
+copies = 1
+printed = true                                   # in the ledger for treefolk-quickbeam: nothing to choose, nothing to print
+source = "mpcfill"
+id = "1qJS-oUivH9Eh_piF4x24gRsNskoGFvBa"
+label = "Sol Ring (JP Archive).png"
+chosen_by = "ledger"
+
+[[cards]]
 name = "Quickbeam, Upstart Ent"
 copies = 1
 status = "missing"                               # no high-resolution image anywhere yet
+
+[[cards]]
+name = "Treefolk"                                # a token the deck makes
+kind = "token"
+copies = 2
+source = "mpcfill"
+id = "1x...."
+label = "Treefolk token 2/2 (Showcase)"
 ```
 
 Every record carries enough to rebuild the image URL without a lookup: mpcfill ids download from `https://drive.google.com/uc?id=<id>&export=download`, Scryfall ids from the `image_png` column. `mtg art --keep` re-runs only for cards without a `chosen_by = "user"` entry, so a decklist edit does not throw away clicks.
+
+## Printing only what changed
+
+The user has already printed both decks once, and a deck keeps changing. A new order must contain only the cards that are not already in the box.
+
+**The ledger already exists**, in the decks repo, and this suite adopts it as is:
+
+- `printed/ledger.csv`: one row per card per order, with `date, order, deck, card, qty, art, drive_id, back_art, back_drive_id`. 166 rows today, from the two first orders.
+- `printed/orders/<deck>-<n>.xml`: the MPC Autofill XML of every order placed, archived. The two first orders are there, so the exact art of every printed card is known.
+- `tools/printed.py add <xml> --deck <deck>` records an order; `printed.py diff <deck> [--printed-as <other>]` lists what still needs printing and what to pull. Cards never move between decks, so each deck is compared only with its own prints, and `--printed-as` handles a renamed list (`treefolk-quickbeam-v2` against the physical `treefolk-quickbeam`).
+- `printed/to-print/*.txt`: the current pending lists, 39 cards for Treefolk v2 and 5 for Vampires.
+
+The suite does not copy this format; it calls into it. `printing/ledger.py` imports `tools/printed.py` from the decks folder (found next to the decklist) and uses its `read_ledger`, `read_deck`, `normalize` and the `add`/`diff` logic, so there is one definition of "printed". When the suite is stable, `printed.py` can move into this repo as `mtg printed add | diff` with the CSV and folder layout unchanged; until then the decks repo owns it.
+
+**The delta** is `printed.py diff` applied per card name:
+
+| Decklist vs ledger | Action |
+|---|---|
+| Card not in any order for this deck | Print it |
+| Card in the ledger with fewer copies than the list | Print the difference |
+| Card in the ledger with more copies than the list (Forest 38 → 32) | Nothing; the spares stay in the box |
+| Card in the ledger but no longer in the list | Nothing to print; listed as "to pull" so the user knows what comes out |
+| Card printed, still in the list, art changed in the gallery | Nothing by default. `--reprint "Name"` or `--reprint-art-changes` adds it |
+| Token the deck now makes more of | Print the difference, same as a basic |
+
+The preflight report shows all four groups: to print, already have, to pull, art changed but kept. `--full` ignores the ledger and prints the whole deck, for a second copy.
+
+**Closing the loop.** `mtg print` writes the new order to `printed/orders/<deck>-<n>.xml` (n = one past the highest existing). After checkout the agent asks for the order number and date and runs `printed.py add` with them, which appends the rows to `ledger.csv`. For a combined order of several decks, one XML is written per deck (the shop takes them as separate uploads in one cart), so each deck's ledger rows point at its own file, which is what `printed.py add --deck` expects. The decks repo is its own git repo, so the agent commits the XML and the CSV there, never in this repo.
+
+**Gallery.** Printed cards show a "printed" badge with the art from the ledger and are locked; clicking one offers "reprint with new art" instead of swapping silently.
+
+**Small orders cost the same as 18 cards.** notmpc prices by deck size with 18 as the smallest tier, so a five-card top-up pays for 18. `mtg ship` takes several decklists and places them in one cart, and the report shows each deck's tier and free slots, so the user can add tokens or spare basics to fill one. Today's pending work: Treefolk v2 is 39 cards (55 tier, 16 free), Vampires is 5 cards (18 tier, 13 free).
 
 ## Step 2: the gallery (`mtg gallery`)
 
@@ -139,10 +218,11 @@ One HTML file, no build step, no framework, written from a template string in `p
 
 A card that will be upscaled gets an "upscale" badge and, once the prepared image exists, a compare view: original and upscaled side by side with a zoom on the rules text, and a switch for `auto | never | always` that writes to the print file like a thumbnail click does.
 
-**Getting clicks back to the file** has two modes, and the page works the same in both:
+**Getting clicks back to the file.** A `http.server` from the standard library serves the page and accepts `POST /choose {name, source, id}`, which rewrites that card's entry in the print file with `chosen_by = "user"`. The agent runs it in the background (the Mac is always on; a `tmux` session named `mtg-gallery` survives the agent's session), tells the user the URL, and reads the print file when the user says they are done. `mtg gallery --stop` ends it.
 
-- **Served** (`--serve`, the default when the agent runs it): a `http.server` from the standard library on `127.0.0.1:<random port>` serves the page and accepts `POST /choose {name, source, id}`, which rewrites that card's entry in the print file with `chosen_by = "user"`. The agent runs it in the background, tells the user the URL, and reads the print file when the user says they are done. `Ctrl-C` or `mtg gallery --stop` ends it.
-- **Static** (`file://` open, or the server is gone): choices go to `localStorage`, and a "Copy choices" button puts a TOML fragment on the clipboard for the user to paste to the agent, which applies it with `mtg art --apply -`.
+**From the phone.** The server binds to the Mac's Tailscale address when `tailscale` is up (`tailscale ip -4`; the CLI is installed here), else to the LAN address, else to localhost, and prints which. The URL carries a random token (`?t=...`) that every request must echo; without it the server answers 403. The server serves only the deck's gallery and its `POST /choose`, and it stops when the user says done or after 24 hours. The page is laid out for a phone first: one card per screen width, thumbnails in a horizontal strip, a tap to choose, a sticky "N changed" bar. `localStorage` keeps the scroll position only; choices never live only in the browser.
+
+A static fallback is kept for when the server is gone: a "Copy choices" button puts a TOML fragment on the clipboard, which the agent applies with `mtg art --apply -`.
 
 Basic lands get one extra control: a "spread over N arts" stepper that sets the `slots` table.
 
@@ -151,10 +231,11 @@ The page never crops or recolours a card image and shows the artist under every 
 ## Step 3: export and send (`mtg print`)
 
 ```bash
-uv run mtg print decks/treefolk-quickbeam.txt xml            # decks/treefolk-quickbeam.xml for notmpc or MPC
-uv run mtg print decks/treefolk-quickbeam.txt pdf            # decks/treefolk-quickbeam.pdf, 3x3 per Letter page
-uv run mtg print decks/treefolk-quickbeam.txt send --to notmpc
-uv run mtg print decks/treefolk-quickbeam.txt send --to printer [--printer NAME]
+uv run mtg print decks/treefolk-quickbeam-v2.txt xml --printed-as treefolk-quickbeam   # decks/printed/orders/treefolk-quickbeam-2.xml, delta only
+uv run mtg print decks/treefolk-quickbeam-v2.txt xml --full                            # the whole deck, ignoring the ledger
+uv run mtg print decks/treefolk-quickbeam-v2.txt send --to notmpc
+uv run mtg print decks/treefolk-quickbeam-v2.txt send --to mpc
+uv run mtg print decks/treefolk-quickbeam-v2.txt placed NMPC-12345 --date 2026-10-20    # printed.py add, then commit in the decks repo
 ```
 
 **Preflight** runs first for every target: the print file exists, every card in the decklist has an entry (the decklist is the source of truth; a stale print file fails with the diff), no entry is `missing`, every image resolves (HEAD on Drive and Scryfall, cached for a day), every image is prepared (filled, upscaled where needed, bleed added) and passed its colour-shift check, and the total slot count is 100 or whatever the list sums to. Problems are listed all at once, the way `mtg check` does, followed by the upscale report.
@@ -175,9 +256,11 @@ uv run mtg print decks/treefolk-quickbeam.txt send --to printer [--printer NAME]
   <backs>
     <card><id>cards/delver-mid-47-back.png</id><sourceType>Local File</sourceType><slots>17</slots><name>...</name><query>delver of secrets</query></card>
   </backs>
-  <cardback>16g2UamJ2jzwNHovLesvsinvd6_qPkZfy</cardback>
+  <cardback>1Y_6xlunE57sI4B3865jpGDL_11FHz5nQ</cardback>
 </order>
 ```
+
+The cardback is the deck's existing one, read from its last archived order, so a top-up matches the cards already in the box. A new deck gets a plain back generated locally (solid colour, full bleed, 2176x2960) and referenced as a local file. The first orders were written by the mpcfill site with `<bracket>` and `(S30) Standard Smooth`; the exporter leaves `bracket` out, as the current format does, and writes the stock from the print file. notmpc only prints S33 regardless.
 
 Slots are 0-indexed in decklist order, copies expanded. mpcfill renders at or above `min_dpi` go in by Drive id, which is what notmpc and the mpcfill desktop tool both resolve. Scryfall images cannot go in by URL, and a render that was upscaled is no longer the Drive file, so both are written as prepared PNGs under `decks/cards/` and referenced as local files. The `<backs>` element is always written, empty when there are no double-faced cards, because the parser expects it. `--stock` overrides the print file; `--foil` is refused for `(P10) Plastic`.
 
@@ -218,13 +301,16 @@ upscayl-bin -i in.png -o out.png -m /Applications/Upscayl.app/Contents/Resources
 
 **Licences.** Upscayl is AGPL, which is fine for calling its binary. Its bundled UltraSharp and Remacri models are CC-BY-NC-SA; the MtG fine-tune is BSD-3. Non-commercial terms match the no-resale stance already in this spec.
 
-**`pdf`** lays out fronts for home printing: US Letter (A4 with `--paper a4`), nine cards per page at exactly 63x88 mm trimmed (bleed removed), 2 mm gutters, hairline cut marks in the gutters and margins, page numbers, and the deck name in the footer. Backs are a second PDF, mirrored per page, written only with `--backs`. Pillow writes multi-page PDFs on its own, so no reportlab. Images go through the same preparation as the XML path, so a home print gets the upscales too; raw downloads live in `data/art/<source>/<id>.<ext>` and prepared images beside them, both reused by later runs.
+Raw downloads live in `data/art/<source>/<id>.<ext>` and prepared images beside them, both reused by later runs.
 
-**`send --to notmpc`** writes the XML, opens `https://notmpc.com/custom-game-cards/` in the browser, and prints the three things the user has to do there: choose black border and 63x88 mm, upload the XML, pay. It also prints the estimated price from a small table in `printing/shops.toml` that the user maintains (the shop's own price table is JavaScript and not scrapeable). That is as far as automation goes without an API. notmpc is the default shop: it prints in Los Angeles on the same S33 stock as MakePlayingCards, so a deck arrives in about a week with no import fees. A later step can drive the upload form itself with Playwright and stop at the pay button; the form is a fixed page, so this is brittle but small.
+**`send --to notmpc`** (`printing/notmpc.py`) drives the shop's order form with Playwright and stops at the pay button. notmpc is the default shop: it prints in Los Angeles on the same S33 stock as MakePlayingCards, so a deck arrives in about a week with no import fees.
 
-**`send --to mpc`** writes the XML into its own folder and, when the `mpc-autofill` desktop tool is installed (`--autofill-bin`), runs it there with `--site MakePlayingCards`. The tool opens Chrome and waits for the user to log in, then fills the order. Every Scryfall-sourced card must be a local file for this path, which the exporter already does. This is the fallback, not a cheaper equivalent: the same stock from the Hong Kong factory, with weeks of shipping and import fees on a small US order. It matters if notmpc is down or out of stock. A driver of our own, with the MPC login saved after a one-time sign-in, would remove the tool's interactive steps; that is a later milestone.
+- *Saved login.* The driver uses a persistent browser profile under `data/browser/notmpc/`. The first run opens a visible window on the shop's sign-in page and waits for the user to log in; every later run reuses the session. Nothing about the account is stored anywhere but that profile, and `mtg print --forget-login notmpc` deletes it.
+- *The form.* Open the custom cards product, choose black border, 63x88 mm, S33 and the quantity tier, upload the XML, wait for the uploader to place every image, check that the slot count on the page matches the order, add to cart, repeat for the next deck's XML, then open the checkout page in a visible window. The user pays there. If the uploader does not accept local-file entries (spike 1), the driver uploads those images one by one through the single-image uploader instead, which is slower but needs no Drive account.
+- *Brittleness.* Every selector lives in one table at the top of the module with a comment naming the page element. A changed page fails fast with a screenshot in `data/browser/notmpc/last-failure.png` and the message "notmpc changed their page; the XML is at ..., upload it by hand", so the fallback is always the manual path the user already knows.
+- *After paying* the agent asks for the order number and runs `placed`, which records the order in the ledger and commits in the decks repo. The price is read from the checkout page and shown before the user pays.
 
-**`send --to printer`** runs the `pdf` export and then `lpr -P <printer> -o media=Letter -o fit-to-page=false -o print-quality=5 <pdf>`. `--printer` defaults to the CUPS default; with none set, which is the case on this Mac today, it lists the printers CUPS knows and stops. A dry run (`--preview`) opens the PDF instead. For paper, notmpc sells blank S33 sheets, so a home print can go on the same black-core stock the shop uses; the PDF layout takes a `--sheet` size for them once their dimensions are known.
+**`send --to mpc`** is the fallback, for when notmpc is down or out of stock: the same stock from the Hong Kong factory, with weeks of shipping and import fees on a small US order. First version: write the XML into its own folder and, when the `mpc-autofill` desktop tool is installed (`--autofill-bin`), run it there with `--site MakePlayingCards`; the tool opens Chrome and waits for the user to log in. Every Scryfall-sourced card is a local file for this path, which the exporter already does. Later: the same Playwright driver pattern with a saved MPC login.
 
 ## Agent surface
 
@@ -237,16 +323,19 @@ MCP tools in `server.py`, each a thin wrapper like `validate_deck`, so they work
 | `set_art(decklist, name, source, id)` | One card by hand, for "use the John Avon one for the Forests". Searches both sources for the name when `id` is omitted and returns the candidates instead. |
 | `print_deck(decklist, target, options)` | Step 3. Returns the output path, the preflight report including which cards were upscaled and from what dpi, and for shops the manual steps left. |
 | `prepare_images(decklist, only?)` | Runs fill, upscale and bleed ahead of time, in the background, so the gallery's compare view and the export are ready. Returns progress and the per-card result. |
-| `ship_deck(decklist, to, style, gallery=true)` | The whole thing: steps 1 to 3 in order. Returns the gallery URL while it waits, then the preflight report, the output path and the remaining manual steps. The skill's normal entry point. |
+| `ship_deck(decklists, to, style, printed_as?, gallery=true)` | The whole thing: steps 1 to 3 in order, for one deck or several in one cart, delta only. Returns the gallery URL while it waits, then the preflight report (to print, already have, to pull), the XML paths and the checkout state. The skill's normal entry point. |
+| `printed_diff(decklist, printed_as?)` / `record_order(decklist, order, date)` | `printed.py diff` and `printed.py add` from the decks repo, so the agent can answer "what do I still need to print" and close the loop after checkout. |
 
-A new skill, `.claude/skills/print-deck/SKILL.md`, walks the agent through: confirm the decklist passes `mtg check`; run `choose_art` with the style the user asked for and read back the missing list and anything chosen below 600 dpi; open the gallery and wait for "done"; run the preflight; say the price estimate and the manual steps; hand over the XML or PDF path. The `commander-deck` skill's last step gains one line pointing here.
+A new skill, `.claude/skills/print-deck/SKILL.md`, walks the agent through: confirm the decklist passes `mtg check`; read the ledger and say what is already printed; run `choose_art` with the style the user asked for and read back the missing list and anything chosen below 600 dpi; open the gallery and wait for "done"; run the preflight and say the tiers and free slots; drive the shop to checkout and say the price; after "paid", record the order and commit in the decks repo. The `commander-deck` skill's last step gains one line pointing here.
 
 The conversation this spec is for:
 
-> **User:** print the treefolk deck, full art where you can
-> **Agent:** runs `choose_art`; "63 cards. 49 are community renders at 800 to 1200 dpi, 13 only exist in the plain frame as 300 dpi scans and will be upscaled to 800, and Quickbeam has no high-resolution image yet. Opening the gallery at http://127.0.0.1:51234 so you can swap any of them; the upscales are running in the background and will show up there for comparison. Tell me when you're done."
+> **User:** print the treefolk v2 changes and the vampire swaps, full art where you can
+> **Agent:** reads the ledger, runs `choose_art` on both; "Treefolk v2: 39 new cards plus 2 Treefolk tokens; 60 are already printed and stay as they are; 33 come out, listed in the notes. Vampires: 5 new cards. Of the 46 new ones, 35 are community renders at 800 to 1200 dpi, 9 are 300 dpi scans that will be upscaled, and Quickbeam still has no high-resolution image. Gallery is at http://100.x.y.z:51234/?t=... and works on your phone; the upscales are running and will show there for comparison. Tell me when you're done."
 > **User:** done, send to notmpc
-> **Agent:** preflight passes except Quickbeam; "Quickbeam is still missing. Print the deck without it and add it later, or use the low-res scan?" → writes the XML → opens notmpc → "Order is 99 cards on S33, about $34. Pick black border and 63x88 mm, upload decks/treefolk-quickbeam.xml, pay."
+> **Agent:** preflight; "Treefolk is 41 cards, the 55 tier with 14 free slots; Vampires is 5, the 18 tier with 13 free. Quickbeam: print without it, or use the low-res scan?" → writes the two XMLs into `printed/orders/` → drives the form for each → "Checkout is open in the browser, both decks in the cart, $31.20. Pay there and give me the order number."
+> **User:** paid, NMPC-12345
+> **Agent:** runs `placed`, commits the XMLs and the ledger in the decks repo; "Logged. Next time only new cards go in."
 
 ## Code layout
 
@@ -256,29 +345,32 @@ mtg_deck_builder/printing/
   printings.py   # Scryfall printings table, scoring, choose()
   mpcfill.py     # /2/editorSearch, /2/cards, /2/sources, /2/cardbacks, Drive download, cache
   printfile.py   # read/write <name>.print.toml, --keep, --apply
-  gallery.py     # HTML template, http.server, POST /choose and POST /upscale
-  prepare.py     # Pillow: corner fill, bleed, colour-shift check, prepared-image cache
+  gallery.py     # HTML template (phone first), http.server with token, Tailscale/LAN bind, POST /choose and POST /upscale
+  prepare.py     # Pillow: corner fill, bleed, plain back, colour-shift check, prepared-image cache
   upscale.py     # effective dpi, engine detection (upscayl-bin, command, none), 4x run + Lanczos downscale
-  export.py      # xml, pdf, preflight
-  send.py        # notmpc, mpc, printer
+  ledger.py      # thin wrapper over the decks repo's tools/printed.py: diff, add, last order's cardback, next order number
+  tokens.py      # tokens a deck makes, from Scryfall all_parts
+  export.py      # xml (delta or full, one file per deck), preflight
+  notmpc.py      # Playwright driver: saved login, form fill per XML, one cart, stop at checkout, failure screenshot
+  send.py        # dispatch: notmpc, mpc
   sources.toml   # default mpcfill source order
 ```
 
-`cards.py` gains the `printings` table in `build_index` and a `printings_of(db, oracle_id)` query. `cli.py` gains `ship`, plus `art`, `gallery`, `print` and `print ... prepare` as its parts. `pyproject.toml` gains `pillow`. Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `.xml`, `.pdf` and `cards/` land; add `/data/art/`.
+`cards.py` gains the `printings` table and a `tokens_of` lookup in `build_index`, and a `printings_of(db, oracle_id)` query. `cli.py` gains `ship`, plus `art`, `gallery`, `print`, `print ... prepare` and `print ... placed` as its parts. `pyproject.toml` gains `pillow` and `playwright` (plus `uv run playwright install chromium` once, in the README's setup steps). Upscayl is an external app, installed with `brew install --cask upscayl` and listed in the README's setup steps as optional (without it, images are resampled, not upscaled). `README.md` gains a "Printing a deck" section and the data table gains `data/art/` and `data/browser/`. `.gitignore` already covers `decks/`, which is where `.print.toml`, `printed/` and `cards/` land; add `/data/art/` and `/data/browser/`. The decks repo keeps `tools/printed.py`, `printed/ledger.csv` and `printed/orders/`; this repo only calls them.
 
 ## Milestones
 
 Each one ships on its own and is checked against the real Treefolk deck, as the repo has no test suite.
 
 1. **Spikes (one day).** Upload a hand-written 5-card XML to notmpc with four Drive ids and one `Local File`; record what the uploader does with each. Download 100 Drive files in a row and note any throttling. Install Upscayl, time `upscayl-bin` on a 745x1040 scan on this machine, and run three models (`ultrasharp-4x`, `digital-art-4x`, `high-fidelity-4x`) plus one halftone-aware route on three test cards: a 2015-frame scan, a 2003-frame scan with visible rosettes, and a 500 dpi render. Judge the rules text and the copyright line at 800 dpi by eye and record the colour-shift numbers. Print one bleed-padded upscaled Scryfall PNG and one render through notmpc's single-card uploader to compare at the table. These settle the open questions below and fix the default model.
-2. **`mtg art` with Scryfall only, plus the print file.** Printings table, scoring, `--style`, `--basics`, `--keep`. Offline, so it is testable immediately.
-3. **mpcfill source.** Search, metadata, source ranking, cardbacks, Drive download with cache. `mtg art` now prefers renders.
-4. **Image preparation.** Corner fill, bleed, cache, then the upscale step with engine detection, the 4x-then-Lanczos method, the colour-shift check and the Lanczos fallback. Testable on its own against the Treefolk scans.
-5. **Gallery.** Static page first, then `--serve`, `POST /choose`, and the upscale compare view and switch.
-6. **`mtg print xml` and `send --to notmpc`**, with preflight. This is the point where the friend's flow is fully replaced.
-7. **`mtg print pdf` and `send --to printer`.**
+2. **`mtg art` with Scryfall only, plus the print file and the ledger.** Printings table, scoring, `--style`, `--basics`, `--keep`, tokens from `all_parts`, and the ledger wrapper that locks printed cards and computes the delta. Offline, so it is testable immediately: the delta for `treefolk-quickbeam-v2 --printed-as treefolk-quickbeam` must match `printed/to-print/treefolk-quickbeam-v2.txt` (39 cards) and Vampires must give 5.
+3. **mpcfill source.** Search, metadata, source ranking, token renders, Drive download with cache. `mtg art` now prefers renders.
+4. **Image preparation.** Corner fill, bleed, the plain back, cache, then the upscale step with engine detection, the 4x-then-Lanczos method, the colour-shift check and the Lanczos fallback. Testable on its own against the Treefolk scans.
+5. **Gallery.** Served page with token, Tailscale or LAN bind, phone layout, `POST /choose`, printed-card lock, the upscale compare view and switch.
+6. **`mtg print xml` and `placed`** with preflight and the delta report, one XML per deck into `printed/orders/`. The XML is uploadable by hand from here, so the friend's flow is replaced at this point and the ledger stays current.
+7. **`send --to notmpc`.** The Playwright driver: saved login, form fill per XML, one cart, checkout, failure screenshot.
 8. **`mtg ship`, the MCP tools and the `print-deck` skill.** Update `commander-deck`, `CLAUDE.md` and `README.md`. From here the whole flow is one sentence to the agent.
-9. **Later:** `send --to mpc` through the desktop tool, then our own Playwright drivers for the notmpc upload form and the MPC order flow, each stopping at the pay button; tokens from mpcfill's TOKEN type; per-card foil; a text-safe composite for upscaled cards; art-only upscaling with a re-rendered frame for cards that only exist as poor scans.
+9. **Later:** `send --to mpc` through the desktop tool, then a Playwright driver for MPC; moving `printed.py` into this repo as `mtg printed`; per-card foil; a text-safe composite for upscaled cards; art-only upscaling with a re-rendered frame for cards that only exist as poor scans.
 
 ## Open questions
 
@@ -289,3 +381,6 @@ Each one ships on its own and is checked against the real Treefolk deck, as the 
 - **Which checkout does the MCP server run from?** Today it runs from `~/Documents/Code/10-19 Projects/11 MTG-Deck-Builder`, three merges behind `main`, and the data lives there. Either re-register it against the `~/work` checkout or point `MTG_DATA_DIR` at the existing data, before milestone 2 adds a table that needs a rebuild.
 - **Image terms.** mpcfill's community asks for no commercial use; Scryfall's terms forbid presenting images as counterfeits. A proxy deck for the user's own casual table is what both communities exist for. The tools should not be pointed at resale, and the README should say so in one line.
 - **Rulings on proxies at the user's tables** are the user's business, not the tool's; nothing here changes `mtg check`.
+- **Does notmpc's site tolerate a scripted browser?** Playwright with a persistent profile looks like a normal Chrome to WooCommerce, and the user is logged in as themselves. If the shop adds a bot check, the driver stops at the form and the manual upload remains. Confirmed only by trying, in spike 1.
+- **Card back for top-ups.** The user chose a plain back, but the two printed decks each carry an illustrated mpcfill back, and they differ from each other. A top-up with a plain back would stand out in an unsleeved shuffle. The spec defaults to matching each deck's existing back; the user should confirm or override.
+- **Assumed, not yet confirmed:** this agent builds it, and it is for the user alone.
